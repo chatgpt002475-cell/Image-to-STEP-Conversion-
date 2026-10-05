@@ -69,9 +69,29 @@
                 <div id="upload-panel">
                     <div id="drop-zone" class="drop-zone">
                         <div class="drop-icon">📁</div>
-                        <div class="drop-text">Drag & drop engineering image here</div>
-                        <div class="drop-hint">PNG, JPG, SVG, WebP • or press Ctrl+V to paste</div>
-                        <input type="file" id="file-input" accept="image/*" style="display:none;">
+                        <div class="drop-text">Drag &amp; Drop Images or Folders Here</div>
+                        <div class="drop-hint">Drop single images or entire folders with multiple parts</div>
+                        <div style="display:flex; gap:8px; justify-content:center; margin-top:12px;">
+                            <button type="button" id="btn-select-file" class="btn btn-secondary" style="font-size:11px; padding:4px 10px; cursor:pointer;">
+                                🖼️ Select Images
+                            </button>
+                            <button type="button" id="btn-select-folder" class="btn btn-secondary" style="font-size:11px; padding:4px 10px; cursor:pointer;">
+                                📁 Select Folder
+                            </button>
+                        </div>
+                        <input type="file" id="file-input" accept="image/*" multiple style="display:none;">
+                        <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none;">
+                    </div>
+
+                    <!-- Multi-Part / Folder Gallery Strip -->
+                    <div id="folder-parts-container" class="folder-parts-container hidden">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span id="folder-parts-title" style="font-size:11px; font-weight:600; color:var(--accent-cyan);">📁 Folder Parts (0)</span>
+                            <button type="button" id="btn-render-all-folder-parts" class="btn btn-primary" style="font-size:10px; padding:3px 8px; background:linear-gradient(135deg, #00e5ff, #0077ff); color:#000; font-weight:700; border:none; cursor:pointer; border-radius:4px;">
+                                ⚡ Assembly (All Parts)
+                            </button>
+                        </div>
+                        <div id="folder-parts-list" class="folder-parts-list"></div>
                     </div>
                 </div>
 

@@ -53,27 +53,99 @@ class ImageToCadApp {
             });
         });
 
-        // File Upload Drop Zone & Input
+        // File & Folder Upload Controls
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
+        const folderInput = document.getElementById('folder-input');
+        const btnSelectFile = document.getElementById('btn-select-file');
+        const btnSelectFolder = document.getElementById('btn-select-folder');
 
-        dropZone.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files[0]) {
-                this.handleImageFile(e.target.files[0]);
+        if (btnSelectFile) {
+            btnSelectFile.addEventListener('click', (e) => {
+                e.stopPropagation();
+                fileInput.click();
+            });
+        }
+
+        if (btnSelectFolder) {
+            btnSelectFolder.addEventListener('click', (e) => {
+                e.stopPropagation();
+                folderInput.click();
+            });
+        }
+
+        dropZone.addEventListener('click', (e) => {
+            if (e.target !== btnSelectFile && e.target !== btnSelectFolder) {
+                fileInput.click();
             }
         });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                if (e.target.files.length === 1) {
+                    this.handleImageFile(e.target.files[0]);
+                } else {
+                    this.handleMultipleFiles(Array.from(e.target.files));
+                }
+            }
+        });
+
+        if (folderInput) {
+            folderInput.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                    this.handleMultipleFiles(Array.from(e.target.files));
+                }
+            });
+        }
+
+        const btnRenderAll = document.getElementById('btn-render-all-folder-parts');
+        if (btnRenderAll) {
+            btnRenderAll.addEventListener('click', () => {
+                this.renderFolderAssembly();
+            });
+        }
 
         dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             dropZone.classList.add('dragover');
         });
         dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-        dropZone.addEventListener('drop', (e) => {
+        dropZone.addEventListener('drop', async (e) => {
             e.preventDefault();
             dropZone.classList.remove('dragover');
-            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                this.handleImageFile(e.dataTransfer.files[0]);
+            
+            // Check for webkitGetAsEntry to support folders dropped directly!
+            const items = e.dataTransfer.items;
+            if (items && items.length > 0) {
+                const collectedFiles = [];
+                const queue = [];
+                for (let i = 0; i < items.length; i++) {
+                    const entry = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
+                    if (entry) {
+                        queue.push(this.traverseFileTree(entry, collectedFiles));
+                    } else if (items[i].kind === 'file') {
+                        const f = items[i].getAsFile();
+                        if (f && (f.type.startsWith('image/') || /\.(png|jpe?g|svg|webp|bmp)$/i.test(f.name))) {
+                            collectedFiles.push(f);
+                        }
+                    }
+                }
+                await Promise.all(queue);
+                if (collectedFiles.length > 1) {
+                    this.handleMultipleFiles(collectedFiles);
+                    return;
+                } else if (collectedFiles.length === 1) {
+                    this.handleImageFile(collectedFiles[0]);
+                    return;
+                }
+            }
+
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                if (e.dataTransfer.files.length === 1) {
+                    this.handleImageFile(e.dataTransfer.files[0]);
+                } else {
+                    this.handleMultipleFiles(Array.from(e.dataTransfer.files));
+                }
             }
         });
 
@@ -227,6 +299,140 @@ class ImageToCadApp {
         await this.loadFromDataUrl(dataUrl, preset.name);
     }
 
+    async traverseFileTree(item, collectedFiles) {
+        if (item.isFile) {
+            return new Promise((resolve) => {
+                item.file((file) => {
+                    if (file && (file.type.startsWith('image/') || /\.(png|jpe?g|svg|webp|bmp)$/i.test(file.name))) {
+                        collectedFiles.push(file);
+                    }
+                    resolve();
+                }, () => resolve());
+            });
+        } else if (item.isDirectory) {
+            return new Promise((resolve) => {
+                const dirReader = item.createReader();
+                const readEntries = () => {
+                    dirReader.readEntries(async (entries) => {
+                        if (entries.length === 0) {
+                            resolve();
+                        } else {
+                            const subPromises = entries.map(entry => this.traverseFileTree(entry, collectedFiles));
+                            await Promise.all(subPromises);
+                            readEntries();
+                        }
+                    }, () => resolve());
+                };
+                readEntries();
+            });
+        }
+    }
+
+    async handleMultipleFiles(files) {
+        const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|svg|webp|bmp)$/i.test(f.name));
+        if (imageFiles.length === 0) {
+            this.showToast('No image files found in folder', 'warning');
+            return;
+        }
+
+        this.folderFiles = imageFiles;
+        this.activeFolderIndex = 0;
+
+        const container = document.getElementById('folder-parts-container');
+        const titleEl = document.getElementById('folder-parts-title');
+        const listEl = document.getElementById('folder-parts-list');
+        if (container) container.classList.remove('hidden');
+        if (titleEl) titleEl.textContent = `📁 Folder Parts (${imageFiles.length})`;
+
+        if (listEl) {
+            listEl.innerHTML = '';
+            imageFiles.forEach((file, idx) => {
+                const pill = document.createElement('div');
+                pill.className = `part-pill ${idx === 0 ? 'active' : ''}`;
+                pill.innerHTML = `<span>🧩</span> ${file.name}`;
+                pill.title = file.name;
+                pill.addEventListener('click', () => {
+                    document.querySelectorAll('.part-pill').forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
+                    this.activeFolderIndex = idx;
+                    this.handleImageFile(file);
+                });
+                listEl.appendChild(pill);
+            });
+        }
+
+        this.showToast(`📁 Loaded folder with ${imageFiles.length} CAD part images!`);
+        await this.handleImageFile(imageFiles[0]);
+    }
+
+    async renderFolderAssembly() {
+        if (!this.folderFiles || this.folderFiles.length === 0) {
+            this.showToast('No folder parts loaded to assemble', 'warning');
+            return;
+        }
+
+        this.setLoading(true, `Assembling ${this.folderFiles.length} folder parts in 3D...`);
+
+        setTimeout(async () => {
+            try {
+                const targetWidthMm = parseFloat(document.getElementById('param-width').value) || 100;
+                const depth = parseFloat(document.getElementById('param-extrude-depth').value) || 15;
+                const epsilon = parseFloat(document.getElementById('param-epsilon').value) || 1.5;
+                const autoThreshold = document.getElementById('param-auto-thresh').checked;
+                const threshold = parseInt(document.getElementById('param-threshold').value, 10);
+                const blur = parseInt(document.getElementById('param-blur').value, 10);
+
+                const assembledGeometries = [];
+                let currentOffsetX = 0;
+                const partSpacing = targetWidthMm * 0.25;
+
+                for (let i = 0; i < this.folderFiles.length; i++) {
+                    const file = this.folderFiles[i];
+                    const img = await window.ImageProcessor.loadImage(file);
+                    const processed = window.ImageProcessor.processCanvas(img, {
+                        threshold,
+                        autoThreshold,
+                        invert: document.getElementById('param-invert').checked,
+                        blur
+                    });
+
+                    const contours = window.ImageProcessor.extractContours(processed.binary, processed.width, processed.height);
+                    if (contours && contours.length > 0) {
+                        const res = window.CadGenerator.createExtrudedSolid(contours, {
+                            depth,
+                            targetWidthMm,
+                            epsilon,
+                            centerAtOrigin: true
+                        });
+
+                        if (res && res.geometry) {
+                            const partW = res.dimensions.width;
+                            res.geometry.translate(currentOffsetX + partW / 2, 0, 0);
+                            currentOffsetX += partW + partSpacing;
+                            assembledGeometries.push(res.geometry);
+                        }
+                    }
+                }
+
+                if (assembledGeometries.length > 0) {
+                    const finalAssembly = window.CadGenerator.mergeGeometries(assembledGeometries);
+                    finalAssembly.computeVertexNormals();
+                    this.currentGeometry = finalAssembly;
+                    this.viewport.setModel(finalAssembly);
+                    this.viewport.setView('iso');
+                    this.showToast(`⚡ Successfully assembled ${assembledGeometries.length} folder parts in 3D!`);
+                } else {
+                    this.showToast('Could not extract 3D contours from folder images', 'warning');
+                }
+            } catch (err) {
+                console.error('Folder Assembly Error:', err);
+                this.showToast('Assembly error: ' + err.message, 'error');
+            } finally {
+                this.setLoading(false);
+            }
+        }, 30);
+    }
+
     async handleImageFile(file) {
         try {
             const img = await window.ImageProcessor.loadImage(file);
@@ -234,7 +440,7 @@ class ImageToCadApp {
             this.hasCustomImage = true;
             this.showToast(`Loaded ${file.name || 'image'}`);
             
-            // Auto-detect if image has dark background (e.g. black background with metallic part)
+            // Auto-detect if image has dark background
             try {
                 const tempCanvas = document.createElement('canvas');
                 tempCanvas.width = 100;
@@ -255,8 +461,9 @@ class ImageToCadApp {
                 console.warn('Auto polarity check skipped:', e);
             }
 
-            // Immediately switch to Extrude mode so the detected 2D contours appear in 3D!
-            this.setMode('extrude', false);
+            // Keep Sheet Metal mode if user was already in Sheet Metal mode, otherwise switch to Extrude
+            const targetMode = (this.currentMode === 'sheetmetal') ? 'sheetmetal' : 'extrude';
+            this.setMode(targetMode, false);
             this.processAndGenerate();
             this.viewport.setView('iso');
         } catch (err) {
@@ -523,7 +730,13 @@ class ImageToCadApp {
     updateDetectedFeaturesUI(features) {
         const badge = document.getElementById('detected-features-badge');
         if (badge) {
-            badge.textContent = `Auto-Detected: OD ${features.flangeOD}mm | Bore ${features.boreID}mm | ${features.boltCount} Bolt Holes`;
+            const partCount = this.currentContours ? this.currentContours.filter(c => !c.isHole).length : 1;
+            const holeCount = this.currentContours ? this.currentContours.filter(c => c.isHole).length : 0;
+            if (partCount > 1) {
+                badge.textContent = `Auto-Detected: ${partCount} Solid Parts | ${holeCount} Holes | Size ${features.flangeOD}mm`;
+            } else {
+                badge.textContent = `Auto-Detected: OD ${features.flangeOD}mm | Bore ${features.boreID}mm | ${holeCount} Holes`;
+            }
         }
 
         // Auto-fill parametric inputs if user hasn't modified them manually

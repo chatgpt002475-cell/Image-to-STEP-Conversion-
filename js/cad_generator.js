@@ -4,7 +4,25 @@
  */
 
 window.CadGenerator = {
-    // Mode 1: Prismatic Extrusion with internal holes
+    // Helper for robust polygon orientation check
+    checkIsClockwise(pts) {
+        if (typeof THREE !== 'undefined' && THREE.ShapeUtils) {
+            if (typeof THREE.ShapeUtils.isClockWise === 'function') {
+                return THREE.ShapeUtils.isClockWise(pts);
+            }
+            if (typeof THREE.ShapeUtils.isClockwise === 'function') {
+                return THREE.ShapeUtils.isClockwise(pts);
+            }
+        }
+        let area = 0;
+        for (let i = 0; i < pts.length; i++) {
+            const j = (i + 1) % pts.length;
+            area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+        }
+        return (area / 2) < 0;
+    },
+
+    // Mode 1: Prismatic Extrusion supporting ALL parts and internal holes
     createExtrudedSolid(contours, options = {}) {
         const {
             depth = 15,
@@ -23,76 +41,29 @@ window.CadGenerator = {
             throw new Error('No valid contours found to extrude');
         }
 
-        // Find primary outer contour (largest area non-hole)
-        const outerContour = contours.find(c => !c.isHole) || contours[0];
-        const holes = contours.filter(c => c.isHole);
+        // 1. Separate all outer contours (individual parts/components) and holes
+        let outerContours = contours.filter(c => !c.isHole && c.area >= 40);
+        if (outerContours.length === 0) {
+            outerContours = [contours[0]];
+        }
+        const holes = contours.filter(c => c.isHole && c.area >= 20);
 
-        // Calculate scaling factor to map pixels to real-world millimeters
-        const bbox = outerContour.bbox;
-        const currentWidth = Math.max(1, bbox.width);
-        const scale = targetWidthMm / currentWidth;
+        // 2. Global bounding box across all outer parts for consistent scaling & positioning
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        outerContours.forEach(oc => {
+            minX = Math.min(minX, oc.bbox.minX);
+            maxX = Math.max(maxX, oc.bbox.maxX);
+            minY = Math.min(minY, oc.bbox.minY);
+            maxY = Math.max(maxY, oc.bbox.maxY);
+        });
+
+        const totalWidthPx = Math.max(1, maxX - minX);
+        const totalHeightPx = Math.max(1, maxY - minY);
+        const scale = targetWidthMm / totalWidthPx;
 
         // Centering offset
-        const offsetX = centerAtOrigin ? (bbox.minX + bbox.maxX) / 2 : 0;
-        const offsetY = centerAtOrigin ? (bbox.minY + bbox.maxY) / 2 : 0;
-
-        // Simplify outer contour
-        const simplifiedOuter = window.ImageProcessor.simplifyDouglasPeucker(outerContour.points, epsilon);
-        if (simplifiedOuter.length < 3) {
-            throw new Error('Outer contour has insufficient points');
-        }
-
-        // Build outer THREE.Shape with proper winding order
-        let outerPoints2D = simplifiedOuter.map(pt => ({
-            x: (pt.x - offsetX) * scale,
-            y: -(pt.y - offsetY) * scale
-        }));
-
-        // In Three.js, outer boundary must be Counter-Clockwise (CCW)
-        if (THREE.ShapeUtils && THREE.ShapeUtils.isClockwise(outerPoints2D)) {
-            outerPoints2D.reverse();
-        }
-
-        const shape = new THREE.Shape();
-        shape.moveTo(outerPoints2D[0].x, outerPoints2D[0].y);
-        for (let i = 1; i < outerPoints2D.length; i++) {
-            shape.lineTo(outerPoints2D[i].x, outerPoints2D[i].y);
-        }
-        shape.closePath();
-
-        // Filter and sanitize internal holes / cutouts
-        // Discard small noise specks (area < 60) to avoid earcut triangulation errors
-        const validHoles = holes
-            .filter(h => h.area >= 60 && h.points.length >= 4)
-            .sort((a, b) => b.area - a.area)
-            .slice(0, 15); // Top 15 largest holes (motor bore, screw holes, slots)
-
-        validHoles.forEach(hole => {
-            try {
-                const simplifiedHole = window.ImageProcessor.simplifyDouglasPeucker(hole.points, Math.max(1.5, epsilon));
-                if (simplifiedHole.length >= 3) {
-                    let holePoints2D = simplifiedHole.map(pt => ({
-                        x: (pt.x - offsetX) * scale,
-                        y: -(pt.y - offsetY) * scale
-                    }));
-
-                    // In Three.js, holes MUST be Clockwise (CW)
-                    if (THREE.ShapeUtils && !THREE.ShapeUtils.isClockwise(holePoints2D)) {
-                        holePoints2D.reverse();
-                    }
-
-                    const holePath = new THREE.Path();
-                    holePath.moveTo(holePoints2D[0].x, holePoints2D[0].y);
-                    for (let i = 1; i < holePoints2D.length; i++) {
-                        holePath.lineTo(holePoints2D[i].x, holePoints2D[i].y);
-                    }
-                    holePath.closePath();
-                    shape.holes.push(holePath);
-                }
-            } catch (err) {
-                console.warn('Skipped problematic hole:', err);
-            }
-        });
+        const offsetX = centerAtOrigin ? (minX + maxX) / 2 : 0;
+        const offsetY = centerAtOrigin ? (minY + maxY) / 2 : 0;
 
         // Extrude settings
         const extrudeSettings = {
@@ -105,32 +76,123 @@ window.CadGenerator = {
             bevelSegments: Math.max(1, bevelSegments)
         };
 
-        let geometry;
-        try {
-            geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        } catch (err) {
-            console.warn('Extrude with all holes failed, retrying with outer shape:', err);
+        const partGeometries = [];
+        const simplify = (pts, eps) => (typeof window !== 'undefined' && window.ImageProcessor && window.ImageProcessor.simplifyDouglasPeucker)
+            ? window.ImageProcessor.simplifyDouglasPeucker(pts, eps)
+            : pts;
+
+        // 3. Extrude EVERY detected outer contour into a solid part
+        outerContours.forEach((outerContour) => {
             try {
-                // Retry with outer boundary only
-                shape.holes = [];
-                geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-            } catch (err2) {
-                console.error('Extrude outer shape failed, generating fallback block:', err2);
-                geometry = new THREE.BoxGeometry(bbox.width * scale, bbox.height * scale, depth);
+                const simplifiedOuter = simplify(outerContour.points, epsilon);
+                if (simplifiedOuter.length < 3) return;
+
+                let outerPoints2D = simplifiedOuter.map(pt => ({
+                    x: (pt.x - offsetX) * scale,
+                    y: -(pt.y - offsetY) * scale
+                }));
+
+                // In Three.js, outer boundary must be Counter-Clockwise (CCW)
+                if (this.checkIsClockwise(outerPoints2D)) {
+                    outerPoints2D.reverse();
+                }
+
+                const shape = new THREE.Shape();
+                shape.moveTo(outerPoints2D[0].x, outerPoints2D[0].y);
+                for (let i = 1; i < outerPoints2D.length; i++) {
+                    shape.lineTo(outerPoints2D[i].x, outerPoints2D[i].y);
+                }
+                shape.closePath();
+
+                // Find holes belonging to this specific outer contour
+                const partHoles = holes.filter(h => {
+                    if (h.parent === outerContour) return true;
+                    return (
+                        h.bbox.minX >= outerContour.bbox.minX - 2 &&
+                        h.bbox.maxX <= outerContour.bbox.maxX + 2 &&
+                        h.bbox.minY >= outerContour.bbox.minY - 2 &&
+                        h.bbox.maxY <= outerContour.bbox.maxY + 2
+                    );
+                }).sort((a, b) => b.area - a.area).slice(0, 20);
+
+                partHoles.forEach(hole => {
+                    try {
+                        const simplifiedHole = simplify(hole.points, Math.max(1.5, epsilon));
+                        if (simplifiedHole.length >= 3) {
+                            let holePoints2D = simplifiedHole.map(pt => ({
+                                x: (pt.x - offsetX) * scale,
+                                y: -(pt.y - offsetY) * scale
+                            }));
+
+                            // In Three.js, holes must be Clockwise (CW)
+                            if (!this.checkIsClockwise(holePoints2D)) {
+                                holePoints2D.reverse();
+                            }
+
+                            const holePath = new THREE.Path();
+                            holePath.moveTo(holePoints2D[0].x, holePoints2D[0].y);
+                            for (let i = 1; i < holePoints2D.length; i++) {
+                                holePath.lineTo(holePoints2D[i].x, holePoints2D[i].y);
+                            }
+                            holePath.closePath();
+                            shape.holes.push(holePath);
+                        }
+                    } catch (errHole) {
+                        console.warn('Skipped problematic hole:', errHole);
+                    }
+                });
+
+                let geom;
+                try {
+                    geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+                } catch (errExtrude) {
+                    console.warn('Extrude with holes failed, attempting outer shape only:', errExtrude);
+                    try {
+                        shape.holes = [];
+                        geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+                    } catch (errExtrudeOuter) {
+                        const pw = Math.max(2, outerContour.bbox.width * scale);
+                        const ph = Math.max(2, outerContour.bbox.height * scale);
+                        geom = new THREE.BoxGeometry(pw, ph, depth);
+                        const cx = ((outerContour.bbox.minX + outerContour.bbox.maxX) / 2 - offsetX) * scale;
+                        const cy = -((outerContour.bbox.minY + outerContour.bbox.maxY) / 2 - offsetY) * scale;
+                        geom.translate(cx, cy, depth / 2);
+                    }
+                }
+
+                if (geom) {
+                    partGeometries.push(geom);
+                }
+            } catch (errPart) {
+                console.warn('Skipped part contour:', errPart);
             }
+        });
+
+        if (partGeometries.length === 0) {
+            // Absolute emergency fallback: box with total dimensions
+            const fb = new THREE.BoxGeometry(totalWidthPx * scale, totalHeightPx * scale, depth);
+            partGeometries.push(fb);
         }
 
-        geometry.computeVertexNormals();
+        // 4. Merge all parts into a unified CAD solid geometry
+        let finalGeometry;
+        if (partGeometries.length === 1) {
+            finalGeometry = partGeometries[0];
+        } else {
+            finalGeometry = this.mergeGeometries(partGeometries);
+        }
 
-        // Orient so the model rests on XY plane with extrusion pointing along Z+
+        finalGeometry.computeVertexNormals();
+
         return {
-            geometry,
+            geometry: finalGeometry,
             dimensions: {
-                width: bbox.width * scale,
-                height: bbox.height * scale,
+                width: totalWidthPx * scale,
+                height: totalHeightPx * scale,
                 depth: depth + (bevelEnabled ? extrudeSettings.bevelThickness * 2 : 0)
             },
-            scaleMmPerPx: scale
+            scaleMmPerPx: scale,
+            partCount: partGeometries.length
         };
     },
 
