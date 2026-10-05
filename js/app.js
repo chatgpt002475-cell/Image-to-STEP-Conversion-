@@ -241,6 +241,70 @@ class ImageToCadApp {
         document.getElementById('export-dxf').addEventListener('click', () => this.exportDxf());
         document.getElementById('export-svg').addEventListener('click', () => this.exportSvg());
 
+        // Studio View Mode Switcher (3D CAD Studio vs 2D Technical Drawing)
+        const btnView3d = document.getElementById('view-mode-3d');
+        const btnView2d = document.getElementById('view-mode-2d');
+        const btnBackTo3d = document.getElementById('btn-back-to-3d');
+        const viewportContainer = document.getElementById('viewport-container');
+        const drawingContainer = document.getElementById('drawing-container');
+        const viewportTopFloat = document.querySelector('.viewport-floating-top');
+        const viewportViewsFloat = document.querySelector('.viewport-floating-views');
+        const slicerWidget = document.querySelector('.slicer-widget');
+
+        const switchTo3d = () => {
+            this.currentViewMode = '3d';
+            if (btnView3d) btnView3d.classList.add('active');
+            if (btnView2d) btnView2d.classList.remove('active');
+            if (viewportContainer) viewportContainer.classList.remove('hidden');
+            if (drawingContainer) drawingContainer.classList.add('hidden');
+            if (viewportTopFloat) viewportTopFloat.classList.remove('hidden');
+            if (viewportViewsFloat) viewportViewsFloat.classList.remove('hidden');
+            if (slicerWidget) slicerWidget.classList.remove('hidden');
+        };
+
+        const switchTo2d = () => {
+            this.currentViewMode = '2d';
+            if (btnView2d) btnView2d.classList.add('active');
+            if (btnView3d) btnView3d.classList.remove('active');
+            if (viewportContainer) viewportContainer.classList.add('hidden');
+            if (drawingContainer) drawingContainer.classList.remove('hidden');
+            if (viewportTopFloat) viewportTopFloat.classList.add('hidden');
+            if (viewportViewsFloat) viewportViewsFloat.classList.add('hidden');
+            if (slicerWidget) slicerWidget.classList.add('hidden');
+            this.render2dDrawing();
+        };
+
+        if (btnView3d) btnView3d.addEventListener('click', switchTo3d);
+        if (btnView2d) btnView2d.addEventListener('click', switchTo2d);
+        if (btnBackTo3d) btnBackTo3d.addEventListener('click', switchTo3d);
+
+        // Drawing theme select
+        const themeSelect = document.getElementById('drawing-theme-select');
+        if (themeSelect) {
+            themeSelect.addEventListener('change', (e) => {
+                if (window.CadDrawingGenerator) {
+                    window.CadDrawingGenerator.theme = e.target.value;
+                    this.render2dDrawing();
+                }
+            });
+        }
+
+        // Export Drawing SVG
+        const btnExportDrawingSvg = document.getElementById('btn-export-drawing-svg');
+        if (btnExportDrawingSvg) {
+            btnExportDrawingSvg.addEventListener('click', () => {
+                this.exportDrawingSvg();
+            });
+        }
+
+        // Export Drawing PNG
+        const btnExportDrawingPng = document.getElementById('btn-export-drawing-png');
+        if (btnExportDrawingPng) {
+            btnExportDrawingPng.addEventListener('click', () => {
+                this.exportDrawingPng();
+            });
+        }
+
         // Sketcher tool buttons
         document.querySelectorAll('.sketch-tool-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -691,7 +755,12 @@ class ImageToCadApp {
 
             if (cadResult && cadResult.geometry) {
                 this.currentGeometry = cadResult.geometry;
+                this.currentDimensions = cadResult.dimensions;
+                this.lastFeatures = features;
                 this.viewport.setModel(cadResult.geometry);
+                if (this.currentViewMode === '2d') {
+                    this.render2dDrawing();
+                }
             }
         } catch (err) {
             console.error('CAD Generation Error:', err);
@@ -823,6 +892,64 @@ class ImageToCadApp {
         this.showToast('Exporting SVG Cut Paths...');
         const scale = parseFloat(document.getElementById('param-width').value) / (this.processedData.width || 400);
         window.SvgExporter.downloadSvg(this.currentContours, this.processedData.width, this.processedData.height, scale, `cad_vectors.svg`);
+    }
+
+    render2dDrawing() {
+        const canvas = document.getElementById('drawing-canvas');
+        if (!canvas || !window.CadDrawingGenerator) return;
+
+        const dimensions = this.currentDimensions || { width: 115, height: 105, depth: 15 };
+        const thickness = parseFloat(document.getElementById('param-sm-thick') ? document.getElementById('param-sm-thick').value : 1.8);
+        const features = this.lastFeatures || { flangeOD: 115, boreID: 34, boltCount: 4, boltDiameter: 6.5 };
+
+        window.CadDrawingGenerator.renderDrawing(canvas, {
+            contours: this.currentContours,
+            dimensions,
+            thickness,
+            partName: this.currentPartName || 'SHEET METAL BRACKET',
+            drawingNo: 'DWG-CATIA-' + Math.floor(1000 + Math.random() * 9000),
+            material: 'ALUMINIUM 6061-T6',
+            scaleRatio: '1:1',
+            features
+        });
+    }
+
+    exportDrawingSvg() {
+        if (!window.CadDrawingGenerator) return;
+        const dimensions = this.currentDimensions || { width: 115, height: 105, depth: 15 };
+        const thickness = parseFloat(document.getElementById('param-sm-thick') ? document.getElementById('param-sm-thick').value : 1.8);
+        const svgStr = window.CadDrawingGenerator.exportDrawingSvg({
+            dimensions,
+            thickness,
+            partName: this.currentPartName || 'SHEET METAL BRACKET',
+            drawingNo: 'DWG-CATIA-001',
+            material: 'ALUMINIUM 6061-T6'
+        });
+        this.downloadFile(svgStr, 'CATIA_2D_Engineering_Drawing.svg', 'image/svg+xml');
+        this.showToast('Downloaded 2D Vector Drawing (SVG)');
+    }
+
+    exportDrawingPng() {
+        const canvas = document.getElementById('drawing-canvas');
+        if (!canvas) return;
+        const dataUrl = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = 'CATIA_2D_Blueprint_Sheet.png';
+        link.href = dataUrl;
+        link.click();
+        this.showToast('Downloaded High-Res 2D Blueprint (PNG)');
+    }
+
+    downloadFile(content, filename, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     showToast(message, type = 'info') {

@@ -165,6 +165,19 @@ window.CadViewport = class {
         const clippingPlanes = this.clippingEnabled ? [this.clippingPlane] : [];
 
         switch (mode) {
+            case 'catia':
+                return new THREE.MeshPhysicalMaterial({
+                    color: 0xdde6ed,
+                    metalness: 0.88,
+                    roughness: 0.16,
+                    clearcoat: 0.45,
+                    clearcoatRoughness: 0.08,
+                    reflectivity: 0.95,
+                    clippingPlanes,
+                    clipShadows: true,
+                    side: THREE.DoubleSide
+                });
+
             case 'cad-clay':
                 return new THREE.MeshStandardMaterial({
                     color: 0xdae2ed,

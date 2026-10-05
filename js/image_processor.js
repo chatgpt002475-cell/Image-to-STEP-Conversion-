@@ -484,5 +484,163 @@ window.ImageProcessor = {
         }
 
         return { grid, res: gridRes };
+    },
+
+    // CATIA-Grade Least Squares Circle Fitter (Kåsa / Taubin formulation)
+    fitCircle(points) {
+        if (!points || points.length < 5) return null;
+        let sumX = 0, sumY = 0, sumX2 = 0, sumY2 = 0, sumXY = 0;
+        let sumX3 = 0, sumY3 = 0, sumX1Y2 = 0, sumX2Y1 = 0;
+        const n = points.length;
+
+        for (let i = 0; i < n; i++) {
+            const x = points[i].x;
+            const y = points[i].y;
+            const x2 = x * x;
+            const y2 = y * y;
+            sumX += x;
+            sumY += y;
+            sumX2 += x2;
+            sumY2 += y2;
+            sumXY += x * y;
+            sumX3 += x * x2;
+            sumY3 += y * y2;
+            sumX1Y2 += x * y2;
+            sumX2Y1 += x2 * y;
+        }
+
+        const C = n * sumX2 - sumX * sumX;
+        const D = n * sumXY - sumX * sumY;
+        const E = n * sumX3 + n * sumX1Y2 - (sumX2 + sumY2) * sumX;
+        const G = n * sumY2 - sumY * sumY;
+        const H = n * sumX2Y1 + n * sumY3 - (sumX2 + sumY2) * sumY;
+
+        const denom = 2 * (C * G - D * D);
+        if (Math.abs(denom) < 1e-7) return null;
+
+        const cx = (E * G - D * H) / denom;
+        const cy = (C * H - D * E) / denom;
+
+        let totalR = 0;
+        for (let i = 0; i < n; i++) {
+            totalR += Math.hypot(points[i].x - cx, points[i].y - cy);
+        }
+        const rMean = totalR / n;
+
+        let totalVar = 0;
+        for (let i = 0; i < n; i++) {
+            const r = Math.hypot(points[i].x - cx, points[i].y - cy);
+            totalVar += Math.pow(r - rMean, 2);
+        }
+        const stdDevRatio = Math.sqrt(totalVar / n) / rMean;
+
+        return {
+            cx,
+            cy,
+            radius: rMean,
+            circularity: 1.0 - Math.min(1.0, stdDevRatio),
+            isCircle: stdDevRatio < 0.22
+        };
+    },
+
+    // Regularize a hole into an exact parametric CAD circle if circularity matches
+    regularizeHole(hole, segments = 36) {
+        const fit = this.fitCircle(hole.points);
+        if (fit && fit.isCircle && fit.radius >= 2.5) {
+            const circlePts = [];
+            for (let i = 0; i < segments; i++) {
+                const angle = (i * 2 * Math.PI) / segments;
+                circlePts.push({
+                    x: fit.cx + fit.radius * Math.cos(angle),
+                    y: fit.cy + fit.radius * Math.sin(angle)
+                });
+            }
+            return {
+                ...hole,
+                points: circlePts,
+                isParametricCircle: true,
+                circleCenter: { x: fit.cx, y: fit.cy },
+                circleRadius: fit.radius,
+                circleDiameter: fit.radius * 2
+            };
+        }
+        return hole;
+    },
+
+    // Snap edges to orthogonal CATIA CAD lines & 45° chamfers
+    regularizePolygon(points, epsilon = 2.0, snapTolDeg = 8.0) {
+        if (!points || points.length < 4) return points;
+        const simplified = this.simplifyDouglasPeucker(points, epsilon);
+        if (simplified.length < 4) return simplified;
+
+        const regularized = [];
+        const n = simplified.length;
+
+        for (let i = 0; i < n; i++) {
+            const p1 = simplified[i];
+            const p2 = simplified[(i + 1) % n];
+
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const len = Math.hypot(dx, dy);
+
+            let angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+            if (angleDeg < 0) angleDeg += 360;
+
+            let snappedP2 = { x: p2.x, y: p2.y };
+
+            // Check orthogonal snap (0°, 90°, 180°, 270°, 360°)
+            const cardinals = [0, 90, 180, 270, 360];
+            let didSnap = false;
+            for (let c of cardinals) {
+                if (Math.abs(angleDeg - c) <= snapTolDeg) {
+                    const rad = (c * Math.PI) / 180;
+                    snappedP2 = {
+                        x: p1.x + Math.cos(rad) * len,
+                        y: p1.y + Math.sin(rad) * len
+                    };
+                    didSnap = true;
+                    break;
+                }
+            }
+
+            // Check 45° chamfer snap
+            if (!didSnap) {
+                const chamfers = [45, 135, 225, 315];
+                for (let ch of chamfers) {
+                    if (Math.abs(angleDeg - ch) <= snapTolDeg * 0.75) {
+                        const rad = (ch * Math.PI) / 180;
+                        snappedP2 = {
+                            x: p1.x + Math.cos(rad) * len,
+                            y: p1.y + Math.sin(rad) * len
+                        };
+                        break;
+                    }
+                }
+            }
+
+            regularized.push({ x: p1.x, y: p1.y });
+        }
+
+        return regularized;
+    },
+
+    // Regularize all contours (outer bodies and holes) to CATIA quality
+    regularizeContours(contours, epsilon = 1.8) {
+        if (!contours || contours.length === 0) return [];
+
+        return contours.map(c => {
+            if (c.isHole) {
+                return this.regularizeHole(c);
+            } else {
+                const regPts = this.regularizePolygon(c.points, epsilon, 8.0);
+                const bbox = this.polygonBBox(regPts);
+                return {
+                    ...c,
+                    points: regPts,
+                    bbox: bbox
+                };
+            }
+        });
     }
 };

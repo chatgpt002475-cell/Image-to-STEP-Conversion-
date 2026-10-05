@@ -41,12 +41,22 @@ window.CadGenerator = {
             throw new Error('No valid contours found to extrude');
         }
 
-        // 1. Separate all outer contours (individual parts/components) and holes
-        let outerContours = contours.filter(c => !c.isHole && c.area >= 40);
-        if (outerContours.length === 0) {
-            outerContours = [contours[0]];
+        // 0. Apply CATIA-Grade Geometric Regularization (true lines, circular holes, 45° chamfers)
+        let workingContours = contours;
+        if (typeof window !== 'undefined' && window.ImageProcessor && typeof window.ImageProcessor.regularizeContours === 'function') {
+            try {
+                workingContours = window.ImageProcessor.regularizeContours(contours, epsilon);
+            } catch (errReg) {
+                console.warn('Contour regularization fallback:', errReg);
+            }
         }
-        const holes = contours.filter(c => c.isHole && c.area >= 20);
+
+        // 1. Separate all outer contours (individual parts/components) and holes
+        let outerContours = workingContours.filter(c => !c.isHole && c.area >= 40);
+        if (outerContours.length === 0) {
+            outerContours = [workingContours[0]];
+        }
+        const holes = workingContours.filter(c => c.isHole && c.area >= 20);
 
         // 2. Global bounding box across all outer parts for consistent scaling & positioning
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
