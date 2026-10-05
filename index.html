@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to STEP Pro - Convert Images to 3D CAD Models</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+</head>
+<body>
+    <!-- Top Navigation & Export Toolbar -->
+    <header>
+        <div class="logo-group">
+            <div class="logo-icon">📐</div>
+            <div class="app-title">
+                Image to STEP Pro
+                <span class="app-badge">Static CAD Studio</span>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <!-- 2D Formats -->
+            <button id="export-dxf" class="btn btn-secondary" title="Export AutoCAD DXF 2D Drawing for Laser/CNC">
+                <span>📐</span> DXF (2D)
+            </button>
+            <button id="export-svg" class="btn btn-secondary" title="Export Vector SVG Cut Paths">
+                <span>✂️</span> SVG
+            </button>
+
+            <!-- 3D Meshes -->
+            <button id="export-obj" class="btn btn-secondary" title="Export Wavefront OBJ Mesh">
+                <span>🧊</span> OBJ
+            </button>
+            <button id="export-stl-bin" class="btn btn-secondary" title="Export Binary STL for 3D Printing">
+                <span>🖨️</span> STL
+            </button>
+            <button id="export-stl-ascii" class="btn btn-secondary hidden" title="Export ASCII STL">
+                STL (ASCII)
+            </button>
+
+            <!-- Primary Pull to 3D Graphic Window Button -->
+            <button id="header-btn-pull-3d" class="btn btn-primary" title="Pull detected contours from the uploaded image into the 3D graphic window" style="background: linear-gradient(135deg, #00d2ff, #0066ff); font-weight: 700; box-shadow: 0 0 14px rgba(0, 210, 255, 0.5);">
+                <span>⚡</span> Pull into 3D Graphic Window
+            </button>
+
+            <!-- Primary CAD STEP Export -->
+            <button id="export-step" class="btn btn-primary" title="Export ISO 10303-21 STEP AP214 CAD Model (SolidWorks, Fusion 360, FreeCAD)">
+                <span>💾</span> Export STEP (.step)
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="main-layout">
+        <!-- Left Control Sidebar -->
+        <aside class="sidebar">
+            <!-- 1. Input Source Selection -->
+            <div class="sidebar-section">
+                <div class="section-title">
+                    <span>1. Input Source</span>
+                </div>
+                <div class="nav-tabs">
+                    <div class="nav-tab input-tab active" data-source="upload">Upload Image</div>
+                    <div class="nav-tab input-tab" data-source="preset">Presets Library</div>
+                    <div class="nav-tab input-tab" data-source="sketch">Draw 2D Sketch</div>
+                </div>
+
+                <!-- Source: Upload -->
+                <div id="upload-panel">
+                    <div id="drop-zone" class="drop-zone">
+                        <div class="drop-icon">📁</div>
+                        <div class="drop-text">Drag & drop engineering image here</div>
+                        <div class="drop-hint">PNG, JPG, SVG, WebP • or press Ctrl+V to paste</div>
+                        <input type="file" id="file-input" accept="image/*" style="display:none;">
+                    </div>
+                </div>
+
+                <!-- Source: Presets -->
+                <div id="preset-panel" class="hidden">
+                    <div id="preset-grid" class="preset-grid"></div>
+                </div>
+
+                <!-- Source: Sketcher -->
+                <div id="sketch-panel" class="hidden">
+                    <div class="sketcher-container">
+                        <canvas id="sketcher-canvas"></canvas>
+                        <div class="sketch-toolbar">
+                            <button class="sketch-tool-btn active" data-tool="brush">✏️ Pencil</button>
+                            <button class="sketch-tool-btn" data-tool="circle">⭕ Circle</button>
+                            <button class="sketch-tool-btn" data-tool="hole-circle">🕳️ Cutout Hole</button>
+                            <button class="sketch-tool-btn" data-tool="rect">⬛ Rect</button>
+                            <button class="sketch-tool-btn" data-tool="eraser">🧹 Eraser</button>
+                            <button id="sketch-undo" class="sketch-tool-btn">↩️ Undo</button>
+                            <button id="sketch-clear" class="sketch-tool-btn">🗑️ Clear</button>
+                        </div>
+                        <div style="width:100%; display:flex; align-items:center; gap:8px; font-size:11px; margin-top:4px;">
+                            <span>Size:</span>
+                            <input type="range" id="sketch-brush-size" min="4" max="40" value="14">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Processed 2D Vector Preview & Contours -->
+            <div class="sidebar-section">
+                <div class="section-title">
+                    <span>2. Vector Contour Detection</span>
+                </div>
+                <div class="preview-container">
+                    <canvas id="image-preview-canvas"></canvas>
+                    <div id="detected-features-badge" class="feature-badge">
+                        Auto-Analyzing features...
+                    </div>
+                    <button id="btn-pull-to-3d" class="btn btn-primary btn-pull-3d" title="Pull detected contours into the main 3D graphic window">
+                        <span>⚡</span> Pull into 3D Graphic Window
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. CAD Conversion Mode -->
+            <div class="sidebar-section">
+                <div class="section-title">
+                    <span>3. CAD Conversion Mode</span>
+                </div>
+                <div class="nav-tabs">
+                    <div class="nav-tab mode-tab active" data-mode="extrude" title="Prismatic Extrusion with internal holes">📐 Extrude</div>
+                    <div class="nav-tab mode-tab" data-mode="sheetmetal" title="Folded Sheet Metal Chassis Bracket">📦 Sheet Metal</div>
+                    <div class="nav-tab mode-tab" data-mode="revolve" title="Lathe / Rotational CAD Solid">🔄 Revolve</div>
+                    <div class="nav-tab mode-tab" data-mode="relief" title="3D Relief Heightmap for CNC / Print">🏔️ Relief</div>
+                    <div class="nav-tab mode-tab" data-mode="parametric" title="Parametric Mechanical Flange">⚙️ Flange</div>
+                </div>
+            </div>
+
+            <!-- 4. Parameters -->
+            <div class="sidebar-section">
+                <div class="section-title">
+                    <span>4. Parametric CAD Controls</span>
+                </div>
+
+                <!-- Mode: Extrude -->
+                <div class="param-group" data-mode="extrude">
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Extrusion Depth</span>
+                            <span class="param-val"><span id="param-extrude-depth-val">15</span> mm</span>
+                        </div>
+                        <input type="range" id="param-extrude-depth" class="cad-param" min="1" max="100" value="15">
+                    </div>
+
+                    <div class="toggle-row">
+                        <span>Bevel / Chamfer Edges</span>
+                        <label class="switch">
+                            <input type="checkbox" id="param-extrude-bevel" class="cad-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Bevel Thickness</span>
+                            <span class="param-val"><span id="param-bevel-thick-val">1.5</span> mm</span>
+                        </div>
+                        <input type="range" id="param-bevel-thick" class="cad-param" min="0.5" max="8" step="0.5" value="1.5">
+                    </div>
+                </div>
+
+                <!-- Mode: Revolve (Lathe) -->
+                <div class="param-group hidden" data-mode="revolve">
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Total Height</span>
+                            <span class="param-val"><span id="param-revolve-height-val">80</span> mm</span>
+                        </div>
+                        <input type="range" id="param-revolve-height" class="cad-param" min="10" max="250" value="80">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Max Radius</span>
+                            <span class="param-val"><span id="param-revolve-radius-val">40</span> mm</span>
+                        </div>
+                        <input type="range" id="param-revolve-radius" class="cad-param" min="5" max="150" value="40">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Revolution Angle</span>
+                            <span class="param-val"><span id="param-revolve-angle-val">360</span>°</span>
+                        </div>
+                        <input type="range" id="param-revolve-angle" class="cad-param" min="45" max="360" step="15" value="360">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Radial Segments</span>
+                            <span class="param-val"><span id="param-revolve-segments-val">64</span></span>
+                        </div>
+                        <input type="range" id="param-revolve-segments" class="cad-param" min="16" max="128" step="8" value="64">
+                    </div>
+
+                    <div class="toggle-row">
+                        <span>Hollow Bore / Tube</span>
+                        <label class="switch">
+                            <input type="checkbox" id="param-revolve-hollow" class="cad-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Mode: Relief (Heightmap) -->
+                <div class="param-group hidden" data-mode="relief">
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Relief Height (Z)</span>
+                            <span class="param-val"><span id="param-relief-depth-val">10</span> mm</span>
+                        </div>
+                        <input type="range" id="param-relief-depth" class="cad-param" min="1" max="40" value="10">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Solid Base Thickness</span>
+                            <span class="param-val"><span id="param-relief-base-val">5</span> mm</span>
+                        </div>
+                        <input type="range" id="param-relief-base" class="cad-param" min="1" max="20" value="5">
+                    </div>
+
+                    <div class="toggle-row">
+                        <span>Invert Depth Map</span>
+                        <label class="switch">
+                            <input type="checkbox" id="param-relief-invert" class="cad-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Mode: Parametric Flange -->
+                <div class="param-group hidden" data-mode="parametric">
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Flange Outer Diameter (OD)</span>
+                            <span class="param-val"><span id="param-flange-od-val">120</span> mm</span>
+                        </div>
+                        <input type="range" id="param-flange-od" class="cad-param" min="30" max="300" value="120">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Center Bore (ID)</span>
+                            <span class="param-val"><span id="param-flange-bore-val">35</span> mm</span>
+                        </div>
+                        <input type="range" id="param-flange-bore" class="cad-param" min="10" max="150" value="35">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Flange Thickness</span>
+                            <span class="param-val"><span id="param-flange-thick-val">12</span> mm</span>
+                        </div>
+                        <input type="range" id="param-flange-thick" class="cad-param" min="3" max="50" value="12">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Raised Boss / Hub OD</span>
+                            <span class="param-val"><span id="param-flange-boss-od-val">65</span> mm</span>
+                        </div>
+                        <input type="range" id="param-flange-boss-od" class="cad-param" min="20" max="180" value="65">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Hub Total Height</span>
+                            <span class="param-val"><span id="param-flange-boss-h-val">25</span> mm</span>
+                        </div>
+                        <input type="range" id="param-flange-boss-h" class="cad-param" min="12" max="80" value="25">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Bolt Circle (PCD)</span>
+                            <span class="param-val"><span id="param-flange-pcd-val">90</span> mm</span>
+                        </div>
+                        <input type="range" id="param-flange-pcd" class="cad-param" min="25" max="250" value="90">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Bolt Hole Count</span>
+                            <span class="param-val"><span id="param-flange-bolt-n-val">4</span></span>
+                        </div>
+                        <input type="range" id="param-flange-bolt-n" class="cad-param" min="3" max="16" value="4">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Bolt Hole Diameter</span>
+                            <span class="param-val"><span id="param-flange-bolt-dia-val">12</span> mm</span>
+                        </div>
+                        <input type="range" id="param-flange-bolt-dia" class="cad-param" min="4" max="30" value="12">
+                    </div>
+
+                    <div class="toggle-row">
+                        <span>Shaft Keyway Slot</span>
+                        <label class="switch">
+                            <input type="checkbox" id="param-flange-keyway" class="cad-toggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                <!-- Mode: Sheet Metal Bracket (Matches user photo) -->
+                <div class="param-group hidden" data-mode="sheetmetal">
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Sheet Gauge (Thickness)</span>
+                            <span class="param-val"><span id="param-sm-thick-val">1.8</span> mm</span>
+                        </div>
+                        <input type="range" id="param-sm-thick" class="cad-param" min="0.8" max="4.0" step="0.2" value="1.8">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Base Plate Width</span>
+                            <span class="param-val"><span id="param-sm-width-val">110</span> mm</span>
+                        </div>
+                        <input type="range" id="param-sm-width" class="cad-param" min="60" max="220" value="110">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Base Plate Height</span>
+                            <span class="param-val"><span id="param-sm-height-val">100</span> mm</span>
+                        </div>
+                        <input type="range" id="param-sm-height" class="cad-param" min="60" max="200" value="100">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Right Sidewall Depth</span>
+                            <span class="param-val"><span id="param-sm-side-depth-val">55</span> mm</span>
+                        </div>
+                        <input type="range" id="param-sm-side-depth" class="cad-param" min="20" max="100" value="55">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Top Flange Tab Length</span>
+                            <span class="param-val"><span id="param-sm-top-tab-val">32</span> mm</span>
+                        </div>
+                        <input type="range" id="param-sm-top-tab" class="cad-param" min="15" max="60" value="32">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Bottom Foot Length</span>
+                            <span class="param-val"><span id="param-sm-foot-len-val">48</span> mm</span>
+                        </div>
+                        <input type="range" id="param-sm-foot-len" class="cad-param" min="20" max="80" value="48">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Clearance Notch Width</span>
+                            <span class="param-val"><span id="param-sm-notch-w-val">42</span> mm</span>
+                        </div>
+                        <input type="range" id="param-sm-notch-w" class="cad-param" min="15" max="80" value="42">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Clearance Notch Height</span>
+                            <span class="param-val"><span id="param-sm-notch-h-val">52</span> mm</span>
+                        </div>
+                        <input type="range" id="param-sm-notch-h" class="cad-param" min="15" max="80" value="52">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Mounting Holes Diameter</span>
+                            <span class="param-val"><span id="param-sm-hole-dia-val">6.5</span> mm</span>
+                        </div>
+                        <input type="range" id="param-sm-hole-dia" class="cad-param" min="3.0" max="14.0" step="0.5" value="6.5">
+                    </div>
+
+                    <div class="toggle-row">
+                        <span>Reinforcing Stiffener Gusset</span>
+                        <label class="switch">
+                            <input type="checkbox" id="param-sm-gusset" class="cad-toggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- General Image & Mesh Settings (always visible) -->
+                <div style="margin-top:16px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Part Scale / Width</span>
+                            <span class="param-val"><span id="param-width-val">100</span> mm</span>
+                        </div>
+                        <input type="range" id="param-width" class="cad-param" min="10" max="500" value="100">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Binarization Threshold</span>
+                            <span class="param-val"><span id="param-threshold-val">128</span></span>
+                        </div>
+                        <input type="range" id="param-threshold" class="cad-param" min="1" max="254" value="128">
+                    </div>
+
+                    <div class="toggle-row">
+                        <span>Auto Otsu Threshold</span>
+                        <label class="switch">
+                            <input type="checkbox" id="param-auto-thresh" class="cad-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-row">
+                        <span>Invert Black/White</span>
+                        <label class="switch">
+                            <input type="checkbox" id="param-invert" class="cad-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Noise Smoothing</span>
+                            <span class="param-val"><span id="param-blur-val">0</span> px</span>
+                        </div>
+                        <input type="range" id="param-blur" class="cad-param" min="0" max="5" value="0">
+                    </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Vector Tolerance (Epsilon)</span>
+                            <span class="param-val"><span id="param-epsilon-val">1.5</span> px</span>
+                        </div>
+                        <input type="range" id="param-epsilon" class="cad-param" min="0.5" max="8.0" step="0.5" value="1.5">
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right 3D Viewport Workspace -->
+            <div id="viewport-container"></div>
+
+            <!-- Loading Spinner Overlay -->
+            <div id="loading-overlay" class="loading-overlay hidden">
+                <div class="spinner"></div>
+                <div id="loading-text" class="loading-text">Generating 3D CAD Model...</div>
+            </div>
+
+            <!-- Floating Shading Switcher -->
+            <div class="viewport-floating-top">
+                <button class="v-btn shading-btn active" data-shader="cad-clay">🏗️ Clay CAD</button>
+                <button class="v-btn shading-btn" data-shader="metallic">⚙️ Aluminum</button>
+                <button class="v-btn shading-btn" data-shader="wireframe">📐 Wireframe</button>
+                <button class="v-btn shading-btn" data-shader="xray">🔍 X-Ray Glass</button>
+                <button class="v-btn shading-btn" data-shader="normal">🌈 Normals</button>
+                <button class="v-btn shading-btn" data-shader="blueprint">🏷️ Blueprint</button>
+            </div>
+
+            <!-- Floating Camera Presets -->
+            <div class="viewport-floating-views">
+                <button class="v-btn view-btn" data-view="iso">ISO</button>
+                <button class="v-btn view-btn" data-view="top">TOP</button>
+                <button class="v-btn view-btn" data-view="front">FRONT</button>
+                <button class="v-btn view-btn" data-view="right">RIGHT</button>
+                <button class="v-btn view-btn" data-view="reset">RESET</button>
+            </div>
+
+            <!-- Live Cross-Section Slicer Widget -->
+            <div class="slicer-widget">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="checkbox" id="clip-toggle">
+                    <span>Section Slicer</span>
+                </label>
+                <select id="clip-axis">
+                    <option value="z">Z Axis</option>
+                    <option value="y">Y Axis</option>
+                    <option value="x">X Axis</option>
+                </select>
+                <input type="range" id="clip-slider" min="0" max="100" value="50" style="width: 100px;">
+            </div>
+
+            <!-- Real-time CAD Telemetry HUD Card -->
+            <div class="telemetry-hud">
+                <div class="hud-title">CAD Geometric Telemetry</div>
+                <div class="hud-grid">
+                    <div class="hud-item full-width">
+                        <span class="hud-label">Bounding Box (X × Y × Z)</span>
+                        <span id="stat-dim" class="hud-value highlight">-- × -- × -- mm</span>
+                    </div>
+                    <div class="hud-item">
+                        <span class="hud-label">Volume</span>
+                        <span id="stat-vol" class="hud-value">-- cm³</span>
+                    </div>
+                    <div class="hud-item">
+                        <span class="hud-label">Surface Area</span>
+                        <span id="stat-area" class="hud-value">-- cm²</span>
+                    </div>
+                    <div class="hud-item">
+                        <span class="hud-label">Triangles</span>
+                        <span id="stat-tris" class="hud-value">-- ▲</span>
+                    </div>
+                    <div class="hud-item">
+                        <span class="hud-label">Vertices</span>
+                        <span id="stat-verts" class="hud-value">-- pts</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Scripts -->
+    <script src="libs/three.min.js"></script>
+    <script src="libs/OrbitControls.js"></script>
+    
+    <!-- Exporters -->
+    <script src="js/exporters/step_exporter.js"></script>
+    <script src="js/exporters/stl_exporter.js"></script>
+    <script src="js/exporters/obj_exporter.js"></script>
+    <script src="js/exporters/dxf_exporter.js"></script>
+    <script src="js/exporters/svg_exporter.js"></script>
+
+    <!-- Core Modules -->
+    <script src="js/presets.js"></script>
+    <script src="js/image_processor.js"></script>
+    <script src="js/cad_generator.js"></script>
+    <script src="js/viewport.js"></script>
+    <script src="js/sketcher.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
