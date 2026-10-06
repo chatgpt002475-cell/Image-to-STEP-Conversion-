@@ -626,6 +626,57 @@ input:checked + .slider:before {
     box-shadow: 0 0 10px rgba(6, 182, 212, 0.4);
 }
 
+/* Coordinate System & Datum Planes Floating Widget */
+.planes-widget {
+    position: absolute;
+    bottom: 66px;
+    left: 16px;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    padding: 7px 12px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 10;
+    font-size: 11px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    flex-wrap: wrap;
+}
+
+.planes-widget-label {
+    font-weight: 700;
+    color: var(--accent-cyan);
+    font-size: 11px;
+    margin-right: 2px;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.planes-widget .v-btn {
+    padding: 4px 9px;
+    font-size: 11px;
+}
+
+.plane-slider-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    padding-left: 6px;
+    border-left: 1px solid var(--border-color);
+}
+
+.plane-slider-group input[type="range"] {
+    accent-color: var(--accent-cyan);
+    cursor: pointer;
+    height: 4px;
+}
+
 /* Section Slicer Floating Widget */
 .slicer-widget {
     position: absolute;

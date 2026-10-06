@@ -216,6 +216,45 @@ class ImageToCadApp {
         if (clipSlider) clipSlider.addEventListener('input', updateClip);
         if (clipAxisSelect) clipAxisSelect.addEventListener('change', updateClip);
 
+        // Coordinate System & Datum Planes Controls
+        const btnToggleDatum = document.getElementById('btn-toggle-datum');
+        const btnToggleImgXy = document.getElementById('btn-toggle-img-xy');
+        const btnToggleProj = document.getElementById('btn-toggle-projections');
+        const xyOpacitySlider = document.getElementById('xy-opacity-slider');
+        const xyOpacityVal = document.getElementById('xy-opacity-val');
+
+        if (btnToggleDatum) {
+            btnToggleDatum.addEventListener('click', () => {
+                const isVis = !this.viewport.datumPlanesVisible;
+                this.viewport.setDatumPlanesVisible(isVis);
+                btnToggleDatum.classList.toggle('active', isVis);
+            });
+        }
+
+        if (btnToggleImgXy) {
+            btnToggleImgXy.addEventListener('click', () => {
+                const isVis = !this.viewport.imageXYVisible;
+                this.viewport.setImageXYVisible(isVis);
+                btnToggleImgXy.classList.toggle('active', isVis);
+            });
+        }
+
+        if (btnToggleProj) {
+            btnToggleProj.addEventListener('click', () => {
+                const isVis = !this.viewport.projectionsVisible;
+                this.viewport.setProjectionsVisible(isVis);
+                btnToggleProj.classList.toggle('active', isVis);
+            });
+        }
+
+        if (xyOpacitySlider) {
+            xyOpacitySlider.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value, 10);
+                if (xyOpacityVal) xyOpacityVal.textContent = `${val}%`;
+                this.viewport.setImageXYOpacity(val / 100);
+            });
+        }
+
         // Sheet Metal Architecture Selection (Formed L-Mount vs Chassis Bracket vs Stepped Z-Channel)
         const btnSmTypeMotor = document.getElementById('btn-sm-type-motor');
         const btnSmTypeChassis = document.getElementById('btn-sm-type-chassis');
@@ -294,6 +333,7 @@ class ImageToCadApp {
         const viewportTopFloat = document.querySelector('.viewport-floating-top');
         const viewportViewsFloat = document.querySelector('.viewport-floating-views');
         const slicerWidget = document.querySelector('.slicer-widget');
+        const planesWidget = document.getElementById('planes-widget');
 
         const switchTo3d = () => {
             this.currentViewMode = '3d';
@@ -304,6 +344,7 @@ class ImageToCadApp {
             if (viewportTopFloat) viewportTopFloat.classList.remove('hidden');
             if (viewportViewsFloat) viewportViewsFloat.classList.remove('hidden');
             if (slicerWidget) slicerWidget.classList.remove('hidden');
+            if (planesWidget) planesWidget.classList.remove('hidden');
         };
 
         const switchTo2d = () => {
@@ -315,6 +356,7 @@ class ImageToCadApp {
             if (viewportTopFloat) viewportTopFloat.classList.add('hidden');
             if (viewportViewsFloat) viewportViewsFloat.classList.add('hidden');
             if (slicerWidget) slicerWidget.classList.add('hidden');
+            if (planesWidget) planesWidget.classList.add('hidden');
             this.render2dDrawing();
         };
 
@@ -891,6 +933,15 @@ class ImageToCadApp {
                 this.currentGeometry = cadResult.geometry;
                 this.currentDimensions = cadResult.dimensions;
                 this.lastFeatures = features;
+
+                // Render 2D image/drawing on XY Datum Sketch Plane with normal projection rays
+                const imgSource = processed?.canvas || this.currentImg;
+                if (imgSource) {
+                    const imgW = targetWidthMm;
+                    const imgH = processed ? (targetWidthMm * processed.height) / processed.width : targetWidthMm;
+                    this.viewport.setImageOnXY(imgSource, imgW, imgH, this.viewport.imageXYOpacity);
+                }
+
                 this.viewport.setModel(cadResult.geometry);
                 if (this.currentViewMode === '2d') {
                     this.render2dDrawing();

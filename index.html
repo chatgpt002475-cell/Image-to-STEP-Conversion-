@@ -715,6 +715,19 @@
                 <button class="v-btn view-btn" data-view="reset">RESET</button>
             </div>
 
+            <!-- Coordinate System & Datum Planes Floating Widget -->
+            <div class="planes-widget" id="planes-widget">
+                <span class="planes-widget-label">🌐 CAD Reference:</span>
+                <button id="btn-toggle-datum" class="v-btn active" title="Toggle 3D Coordinate Triad & Datum Planes (XY, ZX, YZ)">🌐 Datum Planes</button>
+                <button id="btn-toggle-img-xy" class="v-btn active" title="Toggle 2D Source Image Sketch Plane on XY (Z=0)">🖼️ Image on XY</button>
+                <button id="btn-toggle-projections" class="v-btn active" title="Toggle Multi-Plane Orthographic Projections (ZX Ground, YZ Profile)">📐 Projections</button>
+                <div class="plane-slider-group" title="Opacity of source sketch image on XY plane">
+                    <span>XY Opacity:</span>
+                    <input type="range" id="xy-opacity-slider" min="10" max="100" value="65" style="width: 60px;">
+                    <span id="xy-opacity-val">65%</span>
+                </div>
+            </div>
+
             <!-- Live Cross-Section Slicer Widget -->
             <div class="slicer-widget">
                 <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
