@@ -192,6 +192,17 @@
                         </div>
                         <input type="range" id="param-bevel-thick" class="cad-param" min="0.5" max="8" step="0.5" value="1.5">
                     </div>
+
+                    <div class="param-row">
+                        <div class="param-header">
+                            <span>Extrusion Normal Axis</span>
+                        </div>
+                        <select id="param-extrude-axis" class="cad-select" style="width:100%; font-size:11px; padding:6px 8px; border-radius:4px; background:var(--bg-surface); color:var(--text-primary); border:1px solid var(--border-color); margin-top:4px;">
+                            <option value="z">Normal to Section Plane (Z Axis / Orthogonal)</option>
+                            <option value="y">Normal to Ground Plane (Y Axis / Vertical)</option>
+                            <option value="x">Normal to Profile Axis (X Axis / Longitudinal)</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Mode: Revolve (Lathe) -->
@@ -350,6 +361,9 @@
                             </button>
                             <button type="button" id="btn-sm-type-chassis" class="btn btn-secondary" style="flex:1; font-size:11px; padding:6px 4px; justify-content:center;">
                                 📦 Chassis Bracket
+                            </button>
+                            <button type="button" id="btn-sm-type-stepped" class="btn btn-secondary" style="flex:1; font-size:11px; padding:6px 4px; justify-content:center;" title="Stepped Multi-Bend Channel Bracket (User Upload)">
+                                ⚡ Stepped Z-Channel
                             </button>
                         </div>
                     </div>
@@ -523,6 +537,73 @@
                                 <input type="checkbox" id="param-sm-gusset" class="cad-toggle" checked>
                                 <span class="slider"></span>
                             </label>
+                        </div>
+                    </div>
+
+                    <!-- Subgroup: Stepped Z-Channel Multi-Bend Bracket (User Upload media_1791282879370) -->
+                    <div id="group-sm-stepped" class="hidden">
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Channel Extrusion Length (Normal to Section)</span>
+                                <span class="param-val"><span id="param-sm-step-len-val">130</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-step-len" class="cad-param" min="40" max="300" value="130">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Upper Web Height (H1)</span>
+                                <span class="param-val"><span id="param-sm-step-h1-val">55</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-step-h1" class="cad-param" min="25" max="150" value="55">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Lower Web Height (H2)</span>
+                                <span class="param-val"><span id="param-sm-step-h2-val">55</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-step-h2" class="cad-param" min="25" max="150" value="55">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Middle Step / Shelf Width (W2)</span>
+                                <span class="param-val"><span id="param-sm-step-w2-val">50</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-step-w2" class="cad-param" min="25" max="150" value="50">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Top Flange Width (W1)</span>
+                                <span class="param-val"><span id="param-sm-step-w1-val">40</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-step-w1" class="cad-param" min="20" max="120" value="40">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Bottom Flange Width (W3)</span>
+                                <span class="param-val"><span id="param-sm-step-w3-val">40</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-step-w3" class="cad-param" min="20" max="120" value="40">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Mounting Holes Diameter (⌀)</span>
+                                <span class="param-val"><span id="param-sm-step-hole-val">6.5</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-step-hole" class="cad-param" min="3.0" max="12.0" step="0.5" value="6.5">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Flange Corner Fillet Radius</span>
+                                <span class="param-val"><span id="param-sm-step-fillet-val">5.0</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-step-fillet" class="cad-param" min="1.0" max="12.0" step="0.5" value="5.0">
                         </div>
                     </div>
                 </div>

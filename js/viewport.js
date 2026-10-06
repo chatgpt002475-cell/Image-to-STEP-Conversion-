@@ -132,13 +132,14 @@ window.CadViewport = class {
         const center = new THREE.Vector3();
         bbox.getCenter(center);
 
-        // Center horizontally (X, Y in standard Three.js or X, Z depending on orientation)
+        // Center horizontally (X, Z) and rest bottom surface on engineering ground grid (Y = 0)
         geometry.center();
-
-        // Recompute bbox after center
         geometry.computeBoundingBox();
-        const heightZ = geometry.boundingBox.max.z - geometry.boundingBox.min.z;
-        const heightY = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
+        const minY = geometry.boundingBox.min.y;
+        geometry.translate(0, -minY, 0);
+
+        // Recompute bbox after grounding
+        geometry.computeBoundingBox();
 
         // Create Mesh with active material
         const material = this.createMaterial(this.currentMaterialMode);
@@ -304,28 +305,29 @@ window.CadViewport = class {
         this.currentGeometry.boundingBox.getSize(size);
         const maxDim = Math.max(size.x, size.y, size.z, 50);
         const dist = maxDim * 2.2;
+        const targetY = size.y * 0.5;
 
-        this.controls.target.set(0, 0, 0);
+        this.controls.target.set(0, targetY, 0);
 
         switch (viewType) {
             case 'iso':
-                this.camera.position.set(dist * 0.7, dist * 0.8, dist * 0.9);
+                this.camera.position.set(dist * 0.75, targetY + dist * 0.75, dist * 0.75);
                 break;
             case 'top':
-                this.camera.position.set(0, 0, dist * 1.5);
+                this.camera.position.set(0, targetY + dist * 1.5, 0.001);
                 break;
             case 'front':
-                this.camera.position.set(0, -dist * 1.5, 0);
+                this.camera.position.set(0, targetY, dist * 1.5);
                 break;
             case 'right':
-                this.camera.position.set(dist * 1.5, 0, 0);
+                this.camera.position.set(dist * 1.5, targetY, 0);
                 break;
             case 'reset':
-                this.camera.position.set(dist * 0.7, dist * 0.8, dist * 0.9);
+                this.camera.position.set(dist * 0.75, targetY + dist * 0.75, dist * 0.75);
                 break;
         }
 
-        this.camera.lookAt(0, 0, 0);
+        this.camera.lookAt(0, targetY, 0);
         this.controls.update();
     }
 

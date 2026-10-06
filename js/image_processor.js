@@ -482,6 +482,9 @@ window.ImageProcessor = {
         // Check if outer boundary has an inverted notch at bottom typical of chassis brackets
         const hasBottomNotch = outer.bbox.height > outer.bbox.width * 0.6 && (outer.points.length > 8);
 
+        // Check if drawing represents a stepped Z-channel / multi-bend profile (as in media_1791282879370)
+        const isStepped = !hasDominantBore && (contours.length >= 4 || (outer.bbox.height >= outer.bbox.width * 0.7 && !hasBottomNotch));
+
         return {
             flangeOD: Math.round(estOD),
             boreID: centerBore ? Math.round(centerBore.dia) : Math.round(estOD * 0.32),
@@ -489,7 +492,8 @@ window.ImageProcessor = {
             boltCount: Math.min(16, Math.max(2, estBoltCount)),
             boltDiameter: Math.max(3, Math.round(estBoltDia)),
             isMotorBracket: Boolean(hasDominantBore),
-            isChassisBracket: Boolean(!hasDominantBore && hasBottomNotch),
+            isChassisBracket: Boolean(!hasDominantBore && hasBottomNotch && !isStepped),
+            isSteppedChannel: Boolean(isStepped),
             detectedWidth: outerWidth,
             detectedHeight: outerHeight,
             centerBoreRatio: centerBore ? (centerBore.dia / estOD) : 0

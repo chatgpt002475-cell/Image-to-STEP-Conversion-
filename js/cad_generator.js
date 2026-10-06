@@ -34,7 +34,8 @@ window.CadGenerator = {
             originalWidth = 800,
             originalHeight = 800,
             epsilon = 1.5,
-            centerAtOrigin = true
+            centerAtOrigin = true,
+            extrusionNormal = 'z' // 'z' (Normal to Section Plane), 'y' (Normal to Ground), 'x' (Normal to Profile)
         } = options;
 
         if (!contours || contours.length === 0) {
@@ -192,14 +193,33 @@ window.CadGenerator = {
             finalGeometry = this.mergeGeometries(partGeometries);
         }
 
+        // Apply Extrusion Normal Direction (Strictly normal to selected engineering plane)
+        let dimW = totalWidthPx * scale;
+        let dimH = totalHeightPx * scale;
+        let dimD = depth + (bevelEnabled ? extrudeSettings.bevelThickness * 2 : 0);
+
+        if (extrusionNormal === 'y') {
+            // Extruded vertically normal to ground plane (XZ plane)
+            finalGeometry.rotateX(-Math.PI / 2);
+            const temp = dimH;
+            dimH = dimD;
+            dimD = temp;
+        } else if (extrusionNormal === 'x') {
+            // Extruded horizontally normal to cross-section (YZ plane)
+            finalGeometry.rotateY(Math.PI / 2);
+            const temp = dimW;
+            dimW = dimD;
+            dimD = temp;
+        }
+
         finalGeometry.computeVertexNormals();
 
         return {
             geometry: finalGeometry,
             dimensions: {
-                width: totalWidthPx * scale,
-                height: totalHeightPx * scale,
-                depth: depth + (bevelEnabled ? extrudeSettings.bevelThickness * 2 : 0)
+                width: dimW,
+                height: dimH,
+                depth: dimD
             },
             scaleMmPerPx: scale,
             partCount: partGeometries.length
@@ -1079,6 +1099,225 @@ window.CadGenerator = {
             },
             isFlat: false,
             partName: 'CHASSIS SHEET METAL BRACKET'
+        };
+    },
+
+    // Mode 5C: Stepped Sheet Metal Z-Channel Bracket
+    // (Matches user upload media_1791282879370 with multi-step press-brake cylindrical bends
+    //  and extrusion strictly normal to the section profile)
+    createSteppedZChannel(params = {}) {
+        const {
+            thickness = 2.0,            // Sheet metal gauge (mm)
+            length = 130,               // Channel longitudinal extrusion length (mm)
+            topFlangeWidth = 40,        // Top horizontal flange width (mm)
+            upperWebHeight = 55,        // Upper vertical upright web height (mm)
+            stepWidth = 50,             // Middle horizontal step/shelf width (mm)
+            lowerWebHeight = 55,        // Lower vertical upright web height (mm)
+            bottomFlangeWidth = 40,     // Bottom horizontal flange width (mm)
+            bendRadius = 2.0,           // Press-brake inner bend radius (mm)
+            holeDia = 6.5,              // Standard mounting hole diameter (mm)
+            cornerFillet = 5.0,         // Flange outer corner fillet radius (mm)
+            isFlat = false              // If true, generate unfolded sheet blank for laser cutting
+        } = params;
+
+        const geoms = [];
+        const t = Math.max(0.8, thickness);
+        const rIn = Math.max(0.4, bendRadius);
+        const rOut = rIn + t;
+        const rHole = holeDia / 2;
+        const L = Math.max(20, length);
+
+        const makeFlatPlateWithHoles = (width, len, numHoles, rH, cornerR = 0) => {
+            const shape = new THREE.Shape();
+            const w = Math.max(2, width);
+            const l = Math.max(2, len);
+            const cr = Math.min(cornerR, w * 0.4, l * 0.4);
+
+            if (cr > 0.5) {
+                shape.moveTo(0, 0);
+                shape.lineTo(w - cr, 0);
+                shape.absarc(w - cr, cr, cr, -Math.PI / 2, 0, false);
+                shape.lineTo(w, l - cr);
+                shape.absarc(w - cr, l - cr, cr, 0, Math.PI / 2, false);
+                shape.lineTo(0, l);
+                shape.closePath();
+            } else {
+                shape.moveTo(0, 0);
+                shape.lineTo(w, 0);
+                shape.lineTo(w, l);
+                shape.lineTo(0, l);
+                shape.closePath();
+            }
+
+            if (numHoles >= 2 && rH > 0.5) {
+                const h1 = new THREE.Path();
+                h1.absarc(w * 0.5, l * 0.25, rH, 0, Math.PI * 2, true);
+                shape.holes.push(h1);
+
+                const h2 = new THREE.Path();
+                h2.absarc(w * 0.5, l * 0.75, rH, 0, Math.PI * 2, true);
+                shape.holes.push(h2);
+            }
+
+            const geom = new THREE.ExtrudeGeometry(shape, {
+                steps: 1,
+                depth: t,
+                bevelEnabled: true,
+                bevelThickness: 0.15,
+                bevelSize: 0.15,
+                bevelSegments: 1,
+                curveSegments: 24
+            });
+            return { geom, width: w, len: l };
+        };
+
+        if (isFlat) {
+            // UNFOLDED 2D FLAT PATTERN (CATIA Laser-cut Blank)
+            // Bend allowance for 90° press brake bend
+            const ba = (Math.PI / 2) * (rIn + 0.44 * t);
+            const bd = 2 * rOut - ba;
+            const totalW = topFlangeWidth + upperWebHeight + stepWidth + lowerWebHeight + bottomFlangeWidth - (4 * bd);
+
+            const blank = new THREE.Shape();
+            const cr = Math.min(cornerFillet, 8);
+            blank.moveTo(cr, 0);
+            blank.lineTo(totalW - cr, 0);
+            blank.absarc(totalW - cr, cr, cr, -Math.PI / 2, 0, false);
+            blank.lineTo(totalW, L - cr);
+            blank.absarc(totalW - cr, L - cr, cr, 0, Math.PI / 2, false);
+            blank.lineTo(cr, L);
+            blank.absarc(cr, L - cr, cr, Math.PI / 2, Math.PI, false);
+            blank.lineTo(0, cr);
+            blank.absarc(cr, cr, cr, Math.PI, 1.5 * Math.PI, false);
+            blank.closePath();
+
+            // Mounting holes on unfolded flat blank
+            const addH = (s, x, y, r) => {
+                const p = new THREE.Path();
+                p.absarc(x, y, r, 0, Math.PI * 2, true);
+                s.holes.push(p);
+            };
+
+            // Top flange holes
+            const xTopHole = topFlangeWidth * 0.5;
+            addH(blank, xTopHole, L * 0.25, rHole);
+            addH(blank, xTopHole, L * 0.75, rHole);
+
+            // Middle step holes
+            const xStepHole = topFlangeWidth + upperWebHeight - (2 * bd) + stepWidth * 0.5;
+            addH(blank, xStepHole, L * 0.25, rHole);
+            addH(blank, xStepHole, L * 0.75, rHole);
+
+            // Bottom flange holes
+            const xBotHole = totalW - bottomFlangeWidth * 0.5;
+            addH(blank, xBotHole, L * 0.25, rHole);
+            addH(blank, xBotHole, L * 0.75, rHole);
+
+            const flatGeom = new THREE.ExtrudeGeometry(blank, { steps: 1, depth: t, bevelEnabled: false, curveSegments: 32 });
+            flatGeom.computeVertexNormals();
+
+            return {
+                geometry: flatGeom,
+                dimensions: { width: totalW, height: L, depth: t },
+                isFlat: true,
+                partName: 'STEPPED Z-CHANNEL (FLAT BLANK)'
+            };
+        }
+
+        // 3D FOLDED SOLID MODEL (CATIA Sheet Metal with 4 cylindrical press-brake bends
+        //  extruded strictly normal to the section plane along length L)
+
+        // Segment dimensions
+        const wBottomFlat = Math.max(10, bottomFlangeWidth - rOut);
+        const hLowerFlat = Math.max(10, lowerWebHeight - 2 * rOut);
+        const wStepFlat = Math.max(10, stepWidth - 2 * rOut);
+        const hUpperFlat = Math.max(10, upperWebHeight - 2 * rOut);
+        const wTopFlat = Math.max(10, topFlangeWidth - rOut);
+
+        // 1. Bottom Flange (Horizontal plate in XZ plane, at Y in [0, t], extending in +X)
+        const bf = makeFlatPlateWithHoles(wBottomFlat, L, 2, rHole, cornerFillet);
+        bf.geom.rotateX(-Math.PI / 2);
+        bf.geom.translate(rOut, 0, 0);
+        geoms.push(bf.geom);
+
+        // 2. Bend 4: Connects Bottom Flange to Lower Web (curves from horizontal +X to vertical +Y)
+        // Center at (x = rOut, y = rOut), angle PI to 1.5*PI
+        const bend4 = this.makeCurvedBend(L, rIn, t, Math.PI, 1.5 * Math.PI, 20);
+        bend4.translate(rOut, rOut, 0);
+        geoms.push(bend4);
+
+        // 3. Lower Web (Vertical plate at X in [0, t], Y in [rOut, rOut + hLowerFlat])
+        const lwShape = new THREE.Shape();
+        lwShape.moveTo(0, 0);
+        lwShape.lineTo(t, 0);
+        lwShape.lineTo(t, hLowerFlat);
+        lwShape.lineTo(0, hLowerFlat);
+        lwShape.closePath();
+        const lwGeom = new THREE.ExtrudeGeometry(lwShape, { steps: 1, depth: L, bevelEnabled: false });
+        lwGeom.translate(0, rOut, 0);
+        geoms.push(lwGeom);
+
+        // 4. Bend 3: Connects Lower Web to Middle Step (curves from vertical +Y to horizontal -X)
+        // Center at (x = -rIn, y = lowerWebHeight - rOut), angle 0 to 0.5*PI
+        const bend3 = this.makeCurvedBend(L, rIn, t, 0, 0.5 * Math.PI, 20);
+        bend3.translate(-rIn, lowerWebHeight - rOut, 0);
+        geoms.push(bend3);
+
+        // 5. Middle Step (Horizontal plate at Y in [lowerWebHeight - t, lowerWebHeight], extending in -X)
+        const ms = makeFlatPlateWithHoles(wStepFlat, L, 2, rHole, 0);
+        ms.geom.rotateX(-Math.PI / 2);
+        ms.geom.translate(-rIn - wStepFlat, lowerWebHeight - t, 0);
+        geoms.push(ms.geom);
+
+        // End of middle step in X
+        const xStepEnd = -rIn - wStepFlat;
+
+        // 6. Bend 2: Connects Middle Step to Upper Web (curves from horizontal -X to vertical +Y)
+        // Center at (x = xStepEnd + rOut, y = lowerWebHeight + rIn), angle PI to 1.5*PI
+        const bend2 = this.makeCurvedBend(L, rIn, t, Math.PI, 1.5 * Math.PI, 20);
+        bend2.translate(xStepEnd + rOut, lowerWebHeight + rIn, 0);
+        geoms.push(bend2);
+
+        // 7. Upper Web (Vertical plate at X in [xStepEnd, xStepEnd + t], Y in [lowerWebHeight + rIn, lowerWebHeight + rIn + hUpperFlat])
+        const uwShape = new THREE.Shape();
+        uwShape.moveTo(0, 0);
+        uwShape.lineTo(t, 0);
+        uwShape.lineTo(t, hUpperFlat);
+        uwShape.lineTo(0, hUpperFlat);
+        uwShape.closePath();
+        const uwGeom = new THREE.ExtrudeGeometry(uwShape, { steps: 1, depth: L, bevelEnabled: false });
+        uwGeom.translate(xStepEnd, lowerWebHeight + rIn, 0);
+        geoms.push(uwGeom);
+
+        // 8. Bend 1: Connects Upper Web to Top Flange (curves from vertical +Y to horizontal -X)
+        // Center at (x = xStepEnd - rIn, y = lowerWebHeight + upperWebHeight - rOut), angle 0 to 0.5*PI
+        const bend1 = this.makeCurvedBend(L, rIn, t, 0, 0.5 * Math.PI, 20);
+        bend1.translate(xStepEnd - rIn, lowerWebHeight + upperWebHeight - rOut, 0);
+        geoms.push(bend1);
+
+        // 9. Top Flange (Horizontal plate at Y in [lowerWebHeight + upperWebHeight - t, lowerWebHeight + upperWebHeight], extending in -X)
+        const tf = makeFlatPlateWithHoles(wTopFlat, L, 2, rHole, cornerFillet);
+        tf.geom.rotateX(-Math.PI / 2);
+        tf.geom.rotateY(Math.PI);
+        tf.geom.translate(xStepEnd - rIn, lowerWebHeight + upperWebHeight - t, L);
+        geoms.push(tf.geom);
+
+        // Merge all 9 components into a watertight CAD BufferGeometry
+        const mergedGeometry = this.mergeGeometries(geoms);
+        mergedGeometry.computeVertexNormals();
+
+        const totalWidth = bottomFlangeWidth + stepWidth + topFlangeWidth;
+        const totalHeight = lowerWebHeight + upperWebHeight;
+
+        return {
+            geometry: mergedGeometry,
+            dimensions: {
+                width: totalWidth,
+                height: totalHeight,
+                depth: L
+            },
+            isFlat: false,
+            partName: 'STEPPED SHEET METAL Z-CHANNEL'
         };
     },
 

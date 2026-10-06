@@ -61,6 +61,75 @@ window.CadPresets = {
             }
         },
         {
+            id: 'stepped-channel',
+            name: 'Stepped Z-Channel Bracket (User Axonometric Upload)',
+            category: 'Sheet Metal',
+            recommendedMode: 'sheetmetal',
+            bracketType: 'stepped',
+            description: 'Stepped multi-bend sheet metal channel with 4 press-brake bends and extrusion normal to section',
+            generate() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 440;
+                canvas.height = 420;
+                const ctx = canvas.getContext('2d');
+
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, 440, 420);
+
+                // Axonometric stepped channel drawing matching user upload media_1791282879370
+                ctx.fillStyle = '#1e293b';
+                ctx.strokeStyle = '#0284c7';
+                ctx.lineWidth = 2.5;
+
+                // 1. Top Flange
+                ctx.beginPath();
+                ctx.moveTo(110, 60);
+                ctx.lineTo(230, 90);
+                ctx.lineTo(230, 105);
+                ctx.lineTo(110, 75);
+                ctx.closePath();
+                ctx.fill(); ctx.stroke();
+
+                // 2. Upper Vertical Web
+                ctx.beginPath();
+                ctx.moveTo(110, 75);
+                ctx.lineTo(230, 105);
+                ctx.lineTo(230, 195);
+                ctx.lineTo(110, 165);
+                ctx.closePath();
+                ctx.fill(); ctx.stroke();
+
+                // 3. Middle Step Shelf
+                ctx.beginPath();
+                ctx.moveTo(110, 165);
+                ctx.lineTo(230, 195);
+                ctx.lineTo(310, 170);
+                ctx.lineTo(190, 140);
+                ctx.closePath();
+                ctx.fill(); ctx.stroke();
+
+                // 4. Lower Vertical Web
+                ctx.beginPath();
+                ctx.moveTo(190, 140);
+                ctx.lineTo(310, 170);
+                ctx.lineTo(310, 280);
+                ctx.lineTo(190, 250);
+                ctx.closePath();
+                ctx.fill(); ctx.stroke();
+
+                // 5. Bottom Flange
+                ctx.beginPath();
+                ctx.moveTo(190, 250);
+                ctx.lineTo(310, 280);
+                ctx.lineTo(370, 260);
+                ctx.lineTo(250, 230);
+                ctx.closePath();
+                ctx.fill(); ctx.stroke();
+
+                return canvas.toDataURL('image/png');
+            }
+        },
+        {
             id: 'sheet-metal',
             name: 'Sheet Metal Chassis Bracket (User Photo 1)',
             category: 'Sheet Metal',

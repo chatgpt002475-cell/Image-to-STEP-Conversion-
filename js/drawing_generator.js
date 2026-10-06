@@ -316,7 +316,7 @@ window.CadDrawingGenerator = {
         ctx.stroke();
     },
 
-    renderTopView(ctx, bounds, contours, dimensions, features, c) {
+    renderTopView(ctx, bounds, contours, dimensions, features, c, data = {}) {
         const padX = 65;
         const padY = 55;
         const availW = bounds.w - padX * 2;
@@ -333,6 +333,68 @@ window.CadDrawingGenerator = {
         const originY = bounds.y + padY + (availH - drawH) / 2;
 
         ctx.save();
+
+        if (data.sheetMetalType === 'stepped' || data.partName?.includes('STEPPED') || data.partName?.includes('Z-CHANNEL')) {
+            // RENDER STEPPED Z-CHANNEL BLUEPRINT (Matches user photo media_1791282879370)
+            ctx.fillStyle = c.partFill;
+            ctx.strokeStyle = c.partOutline;
+            ctx.lineWidth = 2.2;
+            ctx.fillRect(originX, originY, drawW, drawH);
+            ctx.strokeRect(originX, originY, drawW, drawH);
+
+            // 4 Bend Lines (Dashed Magenta)
+            ctx.strokeStyle = c.bendLine;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([7, 4]);
+
+            const bendX1 = originX + drawW * 0.20;
+            const bendX2 = originX + drawW * 0.44;
+            const bendX3 = originX + drawW * 0.68;
+            const bendX4 = originX + drawW * 0.86;
+
+            [bendX1, bendX2, bendX3, bendX4].forEach((bx, idx) => {
+                ctx.beginPath();
+                ctx.moveTo(bx, originY);
+                ctx.lineTo(bx, originY + drawH);
+                ctx.stroke();
+
+                ctx.font = 'bold 8px monospace';
+                ctx.fillStyle = c.bendLine;
+                const label = (idx % 2 === 0) ? 'BEND UP 90° (R=2.0)' : 'BEND DOWN 90° (R=2.0)';
+                ctx.fillText(label, bx + 3, originY + 14 + idx * 16);
+            });
+            ctx.setLineDash([]);
+
+            // 6 Mounting Bolt Holes (2 on Top Flange, 2 on Middle Step, 2 on Bottom Flange)
+            const rHolePx = (6.5 / 2) * scale;
+            const holeCols = [
+                originX + drawW * 0.10, // Top Flange
+                originX + drawW * 0.56, // Middle Step
+                originX + drawW * 0.93  // Bottom Flange
+            ];
+
+            holeCols.forEach((colX) => {
+                [originY + drawH * 0.25, originY + drawH * 0.75].forEach(rowY => {
+                    ctx.beginPath();
+                    ctx.arc(colX, rowY, rHolePx, 0, Math.PI * 2);
+                    ctx.fillStyle = c.bg;
+                    ctx.fill();
+                    ctx.strokeStyle = c.holes;
+                    ctx.lineWidth = 1.8;
+                    ctx.stroke();
+                    this.drawCenterMark(ctx, colX, rowY, rHolePx + 6, c.centerlines);
+                });
+            });
+
+            this.drawHoleLeaderCallout(ctx, holeCols[2], originY + drawH * 0.25, rHolePx, holeCols[2] + 25, originY + drawH * 0.25 - 20, '6× ⌀6.5 mm THRU [MOUNTING]', c);
+
+            // GD&T Dimensions
+            this.drawLinearDimension(ctx, originX, originY + drawH, originX + drawW, originY + drawH, 24, `${partW.toFixed(1)} mm [DEVELOPED]`, 'horizontal', c);
+            this.drawLinearDimension(ctx, originX, originY + drawH, originX, originY, -26, `${partH.toFixed(1)} mm [LENGTH L]`, 'vertical', c);
+
+            ctx.restore();
+            return;
+        }
 
         if (data.sheetMetalType === 'motor' || data.partName?.includes('MOTOR') || data.partName?.includes('L-MOUNT')) {
             // RENDER FORMED L-MOUNT BRACKET BLUEPRINT (Matches user photo media_1791279263846)
@@ -641,6 +703,58 @@ window.CadDrawingGenerator = {
 
         ctx.save();
 
+        if (data.sheetMetalType === 'stepped' || data.partName?.includes('STEPPED') || data.partName?.includes('Z-CHANNEL')) {
+            // Render Stepped Z-Channel Cross-Section Elevation (Showing bends, gauge thickness, and step heights)
+            const tPx = Math.max(3, (data.thickness || 2.0) * scale * 1.6);
+            const rBPx = Math.max(3, 5 * (scale / 1.5));
+            const wFlange = drawW * 0.30;
+            const wStep = drawW * 0.35;
+            const hLower = drawH * 0.50;
+            const y0 = originY + drawH;
+
+            ctx.fillStyle = c.partFill;
+            ctx.strokeStyle = c.partOutline;
+            ctx.lineWidth = 2.2;
+
+            // Draw full stepped section with wall thickness t
+            ctx.beginPath();
+            const xRight = originX + drawW;
+            ctx.moveTo(xRight, y0);
+            ctx.lineTo(originX + drawW - wFlange + rBPx, y0);
+            ctx.arc(originX + drawW - wFlange + rBPx, y0 - rBPx, rBPx, Math.PI / 2, Math.PI, false);
+            ctx.lineTo(originX + drawW - wFlange, y0 - hLower + rBPx);
+            ctx.arc(originX + drawW - wFlange - rBPx, y0 - hLower + rBPx, rBPx, 0, -Math.PI / 2, true);
+            ctx.lineTo(originX + drawW - wFlange - wStep + rBPx, y0 - hLower);
+            ctx.arc(originX + drawW - wFlange - wStep + rBPx, y0 - hLower - rBPx, rBPx, Math.PI / 2, Math.PI, false);
+            ctx.lineTo(originX + drawW - wFlange - wStep, y0 - drawH + rBPx);
+            ctx.arc(originX + drawW - wFlange - wStep - rBPx, y0 - drawH + rBPx, rBPx, 0, -Math.PI / 2, true);
+            ctx.lineTo(originX, y0 - drawH);
+            ctx.lineTo(originX, y0 - drawH + tPx);
+            ctx.lineTo(originX + drawW - wFlange - wStep - rBPx, y0 - drawH + tPx);
+            ctx.arc(originX + drawW - wFlange - wStep - rBPx, y0 - drawH + rBPx, Math.max(1, rBPx - tPx), -Math.PI / 2, 0, false);
+            ctx.lineTo(originX + drawW - wFlange - wStep + tPx, y0 - hLower - rBPx);
+            ctx.arc(originX + drawW - wFlange - wStep + rBPx, y0 - hLower - rBPx, Math.max(1, rBPx - tPx), Math.PI, Math.PI / 2, true);
+            ctx.lineTo(originX + drawW - wFlange - rBPx, y0 - hLower + tPx);
+            ctx.arc(originX + drawW - wFlange - rBPx, y0 - hLower + rBPx, Math.max(1, rBPx - tPx), -Math.PI / 2, 0, false);
+            ctx.lineTo(originX + drawW - wFlange + tPx, y0 - rBPx);
+            ctx.arc(originX + drawW - wFlange + rBPx, y0 - rBPx, Math.max(1, rBPx - tPx), Math.PI, Math.PI / 2, true);
+            ctx.lineTo(xRight, y0 - tPx);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Diagonal Engineering Section Hatching
+            this.drawHatchLines(ctx, originX, originY, drawW, drawH, c.borderLight);
+
+            // GD&T Dimensions
+            this.drawLinearDimension(ctx, originX, y0, originX + drawW, y0, 22, `${partW.toFixed(1)} mm [OVERALL WIDTH]`, 'horizontal', c);
+            this.drawLinearDimension(ctx, originX, y0, originX, y0 - drawH, -24, `${(drawH / scale).toFixed(1)} mm [HEIGHT]`, 'vertical', c);
+            this.drawHoleLeaderCallout(ctx, originX + drawW - 10, y0 - tPx / 2, tPx, originX + drawW + 15, y0 - 15, `t=${(data.thickness || 2.0).toFixed(1)} mm SHEET GAUGE`, c);
+
+            ctx.restore();
+            return;
+        }
+
         if (data.sheetMetalType === 'motor' || data.partName?.includes('MOTOR') || data.partName?.includes('L-MOUNT')) {
             // Render Folded L-shape front elevation with formed cylindrical bends
             const tPx = Math.max(3, (data.thickness || 2.0) * scale * 1.8);
@@ -753,6 +867,51 @@ window.CadDrawingGenerator = {
             px: cx + (x - y) * cos30 * (s / 100),
             py: cy + (x + y) * sin30 * (s / 100) - z * (s / 100)
         });
+
+        if (data.sheetMetalType === 'stepped' || data.partName?.includes('STEPPED') || data.partName?.includes('Z-CHANNEL')) {
+            // Render 3D Axonometric Wireframe of Stepped Z-Channel Bracket
+            const sL = 36;
+            const p = (x, y, z) => project(x, y, z);
+
+            // 5 Faces in isometric
+            // 1. Bottom Flange
+            const bf0 = p(20, -sL, 0), bf1 = p(60, -sL, 0), bf2 = p(60, sL, 0), bf3 = p(20, sL, 0);
+            ctx.beginPath();
+            ctx.moveTo(bf0.px, bf0.py); ctx.lineTo(bf1.px, bf1.py); ctx.lineTo(bf2.px, bf2.py); ctx.lineTo(bf3.px, bf3.py); ctx.closePath();
+            ctx.fillStyle = c.partFill; ctx.fill(); ctx.stroke();
+
+            // 2. Lower Web
+            const lw0 = p(20, -sL, 40), lw1 = p(20, sL, 40);
+            ctx.beginPath();
+            ctx.moveTo(bf0.px, bf0.py); ctx.lineTo(lw0.px, lw0.py); ctx.lineTo(lw1.px, lw1.py); ctx.lineTo(bf3.px, bf3.py); ctx.closePath();
+            ctx.fill(); ctx.stroke();
+
+            // 3. Middle Step Shelf
+            const ms0 = p(-20, -sL, 40), ms1 = p(-20, sL, 40);
+            ctx.beginPath();
+            ctx.moveTo(lw0.px, lw0.py); ctx.lineTo(ms0.px, ms0.py); ctx.lineTo(ms1.px, ms1.py); ctx.lineTo(lw1.px, lw1.py); ctx.closePath();
+            ctx.fill(); ctx.stroke();
+
+            // 4. Upper Web
+            const uw0 = p(-20, -sL, 80), uw1 = p(-20, sL, 80);
+            ctx.beginPath();
+            ctx.moveTo(ms0.px, ms0.py); ctx.lineTo(uw0.px, uw0.py); ctx.lineTo(uw1.px, uw1.py); ctx.lineTo(ms1.px, ms1.py); ctx.closePath();
+            ctx.fill(); ctx.stroke();
+
+            // 5. Top Flange
+            const tf0 = p(-60, -sL, 80), tf1 = p(-60, sL, 80);
+            ctx.beginPath();
+            ctx.moveTo(uw0.px, uw0.py); ctx.lineTo(tf0.px, tf0.py); ctx.lineTo(tf1.px, tf1.py); ctx.lineTo(uw1.px, uw1.py); ctx.closePath();
+            ctx.fill(); ctx.stroke();
+
+            // Bend Callout
+            ctx.font = 'bold 9px monospace';
+            ctx.fillStyle = c.bendLine;
+            ctx.fillText('4× 90° PRESS-BRAKE BENDS (R=2.0)', lw1.px + 6, lw1.py - 6);
+
+            ctx.restore();
+            return;
+        }
 
         if (data.sheetMetalType === 'motor' || data.partName?.includes('MOTOR') || data.partName?.includes('L-MOUNT')) {
             // Render 3D Axonometric of Formed L-Bracket

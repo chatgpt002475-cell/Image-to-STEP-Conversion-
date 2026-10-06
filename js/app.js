@@ -216,14 +216,24 @@ class ImageToCadApp {
         if (clipSlider) clipSlider.addEventListener('input', updateClip);
         if (clipAxisSelect) clipAxisSelect.addEventListener('change', updateClip);
 
-        // Sheet Metal Architecture Selection (Formed L-Mount vs Chassis Bracket)
+        // Sheet Metal Architecture Selection (Formed L-Mount vs Chassis Bracket vs Stepped Z-Channel)
         const btnSmTypeMotor = document.getElementById('btn-sm-type-motor');
         const btnSmTypeChassis = document.getElementById('btn-sm-type-chassis');
+        const btnSmTypeStepped = document.getElementById('btn-sm-type-stepped');
         if (btnSmTypeMotor) {
             btnSmTypeMotor.addEventListener('click', () => this.setSheetMetalType('motor'));
         }
         if (btnSmTypeChassis) {
             btnSmTypeChassis.addEventListener('click', () => this.setSheetMetalType('chassis'));
+        }
+        if (btnSmTypeStepped) {
+            btnSmTypeStepped.addEventListener('click', () => this.setSheetMetalType('stepped'));
+        }
+
+        // Extrusion Normal Axis selector in Extrude Mode
+        const extrudeAxisSelect = document.getElementById('param-extrude-axis');
+        if (extrudeAxisSelect) {
+            extrudeAxisSelect.addEventListener('change', () => this.scheduleRegenerate());
         }
 
         // Sheet Metal CAD Manufacturing State (3D Folded Solid vs Flat Blank)
@@ -245,9 +255,11 @@ class ImageToCadApp {
             this.hasCustomImage = true;
             // Intelligently preserve mode or detect if uploaded image is sheetmetal/bracket
             if (this.currentMode === 'extrude') {
-                if (this.lastFeatures && (this.lastFeatures.isMotorBracket || this.lastFeatures.isChassisBracket)) {
+                if (this.lastFeatures && (this.lastFeatures.isMotorBracket || this.lastFeatures.isChassisBracket || this.lastFeatures.isSteppedChannel)) {
                     this.setMode('sheetmetal', false);
-                    if (this.lastFeatures.isMotorBracket) {
+                    if (this.lastFeatures.isSteppedChannel) {
+                        this.setSheetMetalType('stepped');
+                    } else if (this.lastFeatures.isMotorBracket) {
                         this.setSheetMetalType('motor');
                     } else if (this.lastFeatures.isChassisBracket) {
                         this.setSheetMetalType('chassis');
@@ -391,7 +403,8 @@ class ImageToCadApp {
 
         this.hasCustomImage = false;
         if (preset.bracketType) {
-            this.setSheetMetalType(preset.bracketType === 'formed_l' ? 'motor' : 'chassis');
+            const bType = preset.bracketType === 'formed_l' ? 'motor' : (preset.bracketType === 'stepped' ? 'stepped' : 'chassis');
+            this.setSheetMetalType(bType);
         }
         this.setMode(preset.recommendedMode, false);
         const dataUrl = preset.generate();
@@ -607,13 +620,17 @@ class ImageToCadApp {
         this.sheetMetalType = type;
         const btnMotor = document.getElementById('btn-sm-type-motor');
         const btnChassis = document.getElementById('btn-sm-type-chassis');
+        const btnStepped = document.getElementById('btn-sm-type-stepped');
         const grpMotor = document.getElementById('group-sm-motor');
         const grpChassis = document.getElementById('group-sm-chassis');
+        const grpStepped = document.getElementById('group-sm-stepped');
 
         if (btnMotor) btnMotor.classList.toggle('active', type === 'motor');
         if (btnChassis) btnChassis.classList.toggle('active', type === 'chassis');
+        if (btnStepped) btnStepped.classList.toggle('active', type === 'stepped');
         if (grpMotor) grpMotor.classList.toggle('hidden', type !== 'motor');
         if (grpChassis) grpChassis.classList.toggle('hidden', type !== 'chassis');
+        if (grpStepped) grpStepped.classList.toggle('hidden', type !== 'stepped');
         this.scheduleRegenerate();
     }
 
@@ -742,6 +759,31 @@ class ImageToCadApp {
                             isFlat
                         });
                         this.currentPartName = isFlat ? 'FORMED L-MOUNT BRACKET (FLAT BLANK)' : 'FORMED L-MOUNT BRACKET';
+                    } else if (this.sheetMetalType === 'stepped') {
+                        // Parametric Stepped Z-Channel Multi-Bend Bracket (User Upload media_1791282879370)
+                        const length = parseFloat(document.getElementById('param-sm-step-len')?.value) || 130;
+                        const h1 = parseFloat(document.getElementById('param-sm-step-h1')?.value) || 55;
+                        const h2 = parseFloat(document.getElementById('param-sm-step-h2')?.value) || 55;
+                        const w2 = parseFloat(document.getElementById('param-sm-step-w2')?.value) || 50;
+                        const w1 = parseFloat(document.getElementById('param-sm-step-w1')?.value) || 40;
+                        const w3 = parseFloat(document.getElementById('param-sm-step-w3')?.value) || 40;
+                        const holeDia = parseFloat(document.getElementById('param-sm-step-hole')?.value) || 6.5;
+                        const fillet = parseFloat(document.getElementById('param-sm-step-fillet')?.value) || 5.0;
+
+                        cadResult = window.CadGenerator.createSteppedZChannel({
+                            thickness,
+                            length,
+                            topFlangeWidth: w1,
+                            upperWebHeight: h1,
+                            stepWidth: w2,
+                            lowerWebHeight: h2,
+                            bottomFlangeWidth: w3,
+                            bendRadius,
+                            holeDia,
+                            cornerFillet: fillet,
+                            isFlat
+                        });
+                        this.currentPartName = isFlat ? 'STEPPED Z-CHANNEL (FLAT BLANK)' : 'STEPPED SHEET METAL Z-CHANNEL';
                     } else {
                         // Parametric Chassis Multi-Flange Bracket
                         const width = parseFloat(document.getElementById('param-sm-width')?.value) || 115;
@@ -775,6 +817,7 @@ class ImageToCadApp {
                     const depth = parseFloat(document.getElementById('param-extrude-depth').value);
                     const bevel = document.getElementById('param-extrude-bevel').checked;
                     const bevelThickness = parseFloat(document.getElementById('param-bevel-thick').value);
+                    const extrusionNormal = document.getElementById('param-extrude-axis')?.value || 'z';
 
                     cadResult = window.CadGenerator.createExtrudedSolid(contours, {
                         depth,
@@ -782,7 +825,8 @@ class ImageToCadApp {
                         bevelThickness,
                         bevelSize: bevelThickness,
                         targetWidthMm,
-                        epsilon
+                        epsilon,
+                        extrusionNormal
                     });
                 } else if (this.currentMode === 'revolve') {
                     const targetHeightMm = parseFloat(document.getElementById('param-revolve-height').value);
