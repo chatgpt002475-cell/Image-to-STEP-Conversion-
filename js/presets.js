@@ -7,10 +7,65 @@
 window.CadPresets = {
     presets: [
         {
-            id: 'sheet-metal',
-            name: 'Sheet Metal Chassis Bracket (User Photo)',
+            id: 'motor-bracket',
+            name: 'Formed L-Mount Bracket (Bore & 90° Flanges)',
             category: 'Sheet Metal',
             recommendedMode: 'sheetmetal',
+            bracketType: 'formed_l',
+            description: 'Formed motor mounting bracket with 36mm bore, 90° base flange & rear tab',
+            generate() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 440;
+                canvas.height = 420;
+                const ctx = canvas.getContext('2d');
+
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, 440, 420);
+
+                // Silhouette representation of the Formed L-bracket
+                ctx.fillStyle = '#1e293b';
+                ctx.beginPath();
+                ctx.moveTo(80, 50);
+                ctx.lineTo(360, 50);
+                // Top tab notch
+                ctx.lineTo(360, 110);
+                // Side waist cutout
+                ctx.arc(360, 210, 24, -Math.PI / 2, Math.PI / 2, true);
+                ctx.lineTo(360, 310);
+                // Forward base flange
+                ctx.lineTo(380, 310);
+                ctx.lineTo(380, 370);
+                ctx.lineTo(60, 370);
+                ctx.lineTo(60, 310);
+                ctx.lineTo(80, 310);
+                // Left side waist cutout
+                ctx.arc(80, 210, 24, Math.PI / 2, -Math.PI / 2, true);
+                ctx.lineTo(80, 50);
+                ctx.closePath();
+                ctx.fill();
+
+                // Center Motor Clearance Bore
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(220, 210, 52, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Top corner mounting holes
+                [ [120, 90, 14], [320, 90, 14], [110, 340, 14], [330, 340, 14] ].forEach(([hx, hy, r]) => {
+                    ctx.beginPath();
+                    ctx.arc(hx, hy, r, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+
+                return canvas.toDataURL('image/png');
+            }
+        },
+        {
+            id: 'sheet-metal',
+            name: 'Sheet Metal Chassis Bracket (User Photo 1)',
+            category: 'Sheet Metal',
+            recommendedMode: 'sheetmetal',
+            bracketType: 'chassis',
             description: 'Folded 3D sheet metal bracket with 90° bends, tabs, gusset & holes',
             generate() {
                 const canvas = document.createElement('canvas');

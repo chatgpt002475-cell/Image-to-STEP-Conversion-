@@ -336,86 +336,194 @@
                             <input type="checkbox" id="param-flange-keyway" class="cad-toggle" checked>
                             <span class="slider"></span>
                         </label>
-                <!-- Mode: Sheet Metal Bracket (Matches user photo) -->
+                    </div>
+                </div>
+
+                <!-- Mode: Sheet Metal Bracket (Matches user photo & CATIA Engineering Standards) -->
                 <div class="param-group hidden" data-mode="sheetmetal">
+                    <!-- Bracket Architecture Selection -->
+                    <div style="margin-bottom:12px;">
+                        <span style="font-size:11px; text-transform:uppercase; color:var(--text-secondary); font-weight:700; letter-spacing:0.5px; display:block; margin-bottom:6px;">Bracket Architecture</span>
+                        <div style="display:flex; gap:4px; background:rgba(15,23,42,0.6); padding:3px; border-radius:var(--radius-md); border:1px solid var(--border-color);">
+                            <button type="button" id="btn-sm-type-motor" class="btn btn-secondary active" style="flex:1; font-size:11px; padding:6px 4px; justify-content:center;">
+                                🏎️ Formed L-Mount
+                            </button>
+                            <button type="button" id="btn-sm-type-chassis" class="btn btn-secondary" style="flex:1; font-size:11px; padding:6px 4px; justify-content:center;">
+                                📦 Chassis Bracket
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 3D Folded Solid vs Unfolded Flat Blank -->
+                    <div style="margin-bottom:14px;">
+                        <span style="font-size:11px; text-transform:uppercase; color:var(--text-secondary); font-weight:700; letter-spacing:0.5px; display:block; margin-bottom:6px;">CAD Manufacturing State</span>
+                        <div style="display:flex; gap:4px; background:rgba(15,23,42,0.6); padding:3px; border-radius:var(--radius-md); border:1px solid var(--border-color);">
+                            <button type="button" id="btn-sm-form-folded" class="btn btn-secondary active" style="flex:1; font-size:11px; padding:6px 4px; justify-content:center;">
+                                📦 3D Folded Solid
+                            </button>
+                            <button type="button" id="btn-sm-form-flat" class="btn btn-secondary" style="flex:1; font-size:11px; padding:6px 4px; justify-content:center;">
+                                📐 Flat Sheet Blank
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Common Sheet Metal Parameters -->
                     <div class="param-row">
                         <div class="param-header">
                             <span>Sheet Gauge (Thickness)</span>
-                            <span class="param-val"><span id="param-sm-thick-val">1.8</span> mm</span>
+                            <span class="param-val"><span id="param-sm-thick-val">2.0</span> mm</span>
                         </div>
-                        <input type="range" id="param-sm-thick" class="cad-param" min="0.8" max="4.0" step="0.2" value="1.8">
+                        <input type="range" id="param-sm-thick" class="cad-param" min="0.8" max="4.0" step="0.2" value="2.0">
                     </div>
 
                     <div class="param-row">
                         <div class="param-header">
-                            <span>Base Plate Width</span>
-                            <span class="param-val"><span id="param-sm-width-val">110</span> mm</span>
+                            <span>Press-Brake Bend Radius (R)</span>
+                            <span class="param-val"><span id="param-sm-bend-r-val">2.0</span> mm</span>
                         </div>
-                        <input type="range" id="param-sm-width" class="cad-param" min="60" max="220" value="110">
+                        <input type="range" id="param-sm-bend-r" class="cad-param" min="1.0" max="5.0" step="0.5" value="2.0">
                     </div>
 
-                    <div class="param-row">
-                        <div class="param-header">
-                            <span>Base Plate Height</span>
-                            <span class="param-val"><span id="param-sm-height-val">100</span> mm</span>
+                    <!-- Subgroup: Formed L-Mount Bracket (User Upload Photo) -->
+                    <div id="group-sm-motor">
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Center Motor Bore (⌀)</span>
+                                <span class="param-val"><span id="param-sm-bore-val">36</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-bore" class="cad-param" min="16" max="75" value="36">
                         </div>
-                        <input type="range" id="param-sm-height" class="cad-param" min="60" max="200" value="100">
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Upright Plate Width</span>
+                                <span class="param-val"><span id="param-sm-motor-w-val">110</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-motor-w" class="cad-param" min="60" max="220" value="110">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Upright Plate Height</span>
+                                <span class="param-val"><span id="param-sm-motor-h-val">100</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-motor-h" class="cad-param" min="60" max="200" value="100">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Forward Base Flange Depth</span>
+                                <span class="param-val"><span id="param-sm-base-len-val">52</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-base-len" class="cad-param" min="25" max="90" value="52">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Rear Top Bent Tab Length</span>
+                                <span class="param-val"><span id="param-sm-top-len-val">26</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-top-len" class="cad-param" min="15" max="50" value="26">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Mounting Bolt Hole (⌀)</span>
+                                <span class="param-val"><span id="param-sm-motor-hole-val">6.5</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-motor-hole" class="cad-param" min="3.0" max="12.0" step="0.5" value="6.5">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Flange Corner Fillet Radius</span>
+                                <span class="param-val"><span id="param-sm-fillet-val">6.0</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-fillet" class="cad-param" min="2.0" max="14.0" step="1.0" value="6.0">
+                        </div>
+
+                        <div class="toggle-row">
+                            <span>Waist Clearance Side Notches</span>
+                            <label class="switch">
+                                <input type="checkbox" id="param-sm-waist" class="cad-toggle" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
                     </div>
 
-                    <div class="param-row">
-                        <div class="param-header">
-                            <span>Right Sidewall Depth</span>
-                            <span class="param-val"><span id="param-sm-side-depth-val">55</span> mm</span>
+                    <!-- Subgroup: Chassis Multi-Flange Bracket -->
+                    <div id="group-sm-chassis" class="hidden">
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Base Plate Width</span>
+                                <span class="param-val"><span id="param-sm-width-val">115</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-width" class="cad-param" min="60" max="220" value="115">
                         </div>
-                        <input type="range" id="param-sm-side-depth" class="cad-param" min="20" max="100" value="55">
-                    </div>
 
-                    <div class="param-row">
-                        <div class="param-header">
-                            <span>Top Flange Tab Length</span>
-                            <span class="param-val"><span id="param-sm-top-tab-val">32</span> mm</span>
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Base Plate Height</span>
+                                <span class="param-val"><span id="param-sm-height-val">105</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-height" class="cad-param" min="60" max="200" value="105">
                         </div>
-                        <input type="range" id="param-sm-top-tab" class="cad-param" min="15" max="60" value="32">
-                    </div>
 
-                    <div class="param-row">
-                        <div class="param-header">
-                            <span>Bottom Foot Length</span>
-                            <span class="param-val"><span id="param-sm-foot-len-val">48</span> mm</span>
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Right Sidewall Depth</span>
+                                <span class="param-val"><span id="param-sm-side-depth-val">52</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-side-depth" class="cad-param" min="20" max="100" value="52">
                         </div>
-                        <input type="range" id="param-sm-foot-len" class="cad-param" min="20" max="80" value="48">
-                    </div>
 
-                    <div class="param-row">
-                        <div class="param-header">
-                            <span>Clearance Notch Width</span>
-                            <span class="param-val"><span id="param-sm-notch-w-val">42</span> mm</span>
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Top Z-Tab Length</span>
+                                <span class="param-val"><span id="param-sm-top-tab-val">32</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-top-tab" class="cad-param" min="15" max="60" value="32">
                         </div>
-                        <input type="range" id="param-sm-notch-w" class="cad-param" min="15" max="80" value="42">
-                    </div>
 
-                    <div class="param-row">
-                        <div class="param-header">
-                            <span>Clearance Notch Height</span>
-                            <span class="param-val"><span id="param-sm-notch-h-val">52</span> mm</span>
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Bottom Foot Length</span>
+                                <span class="param-val"><span id="param-sm-foot-len-val">48</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-foot-len" class="cad-param" min="20" max="80" value="48">
                         </div>
-                        <input type="range" id="param-sm-notch-h" class="cad-param" min="15" max="80" value="52">
-                    </div>
 
-                    <div class="param-row">
-                        <div class="param-header">
-                            <span>Mounting Holes Diameter</span>
-                            <span class="param-val"><span id="param-sm-hole-dia-val">6.5</span> mm</span>
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Clearance Notch Width</span>
+                                <span class="param-val"><span id="param-sm-notch-w-val">34</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-notch-w" class="cad-param" min="15" max="80" value="34">
                         </div>
-                        <input type="range" id="param-sm-hole-dia" class="cad-param" min="3.0" max="14.0" step="0.5" value="6.5">
-                    </div>
 
-                    <div class="toggle-row">
-                        <span>Reinforcing Stiffener Gusset</span>
-                        <label class="switch">
-                            <input type="checkbox" id="param-sm-gusset" class="cad-toggle" checked>
-                            <span class="slider"></span>
-                        </label>
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Clearance Notch Height</span>
+                                <span class="param-val"><span id="param-sm-notch-h-val">60</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-notch-h" class="cad-param" min="15" max="80" value="60">
+                        </div>
+
+                        <div class="param-row">
+                            <div class="param-header">
+                                <span>Mounting Holes Diameter</span>
+                                <span class="param-val"><span id="param-sm-hole-dia-val">6.5</span> mm</span>
+                            </div>
+                            <input type="range" id="param-sm-hole-dia" class="cad-param" min="3.0" max="14.0" step="0.5" value="6.5">
+                        </div>
+
+                        <div class="toggle-row">
+                            <span>Reinforcing Stiffener Gusset</span>
+                            <label class="switch">
+                                <input type="checkbox" id="param-sm-gusset" class="cad-toggle" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
                     </div>
                 </div>
 

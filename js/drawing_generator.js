@@ -87,13 +87,13 @@ window.CadDrawingGenerator = {
         ctx.fillText('VIEW C: ISOMETRIC CAD PREVIEW', isoViewBounds.x, isoViewBounds.y - 12);
 
         // 6. Render View A (Top Orthographic with Dimensions & Holes)
-        this.renderTopView(ctx, topViewBounds, contours, dimensions, features, colors);
+        this.renderTopView(ctx, topViewBounds, contours, dimensions, features, colors, data);
 
         // 7. Render View B (Front Elevation with Thickness & Flange Heights)
-        this.renderFrontView(ctx, frontViewBounds, dimensions, thickness, colors);
+        this.renderFrontView(ctx, frontViewBounds, dimensions, thickness, colors, data);
 
         // 8. Render View C (Isometric Wireframe Detail)
-        this.renderIsometricView(ctx, isoViewBounds, dimensions, thickness, colors);
+        this.renderIsometricView(ctx, isoViewBounds, dimensions, thickness, colors, data);
     },
 
     getThemeColors(theme) {
@@ -332,8 +332,125 @@ window.CadDrawingGenerator = {
         const originX = bounds.x + padX + (availW - drawW) / 2;
         const originY = bounds.y + padY + (availH - drawH) / 2;
 
-        // Draw regularized contours if available, otherwise draw parametric chassis/flange profile
         ctx.save();
+
+        if (data.sheetMetalType === 'motor' || data.partName?.includes('MOTOR') || data.partName?.includes('L-MOUNT')) {
+            // RENDER FORMED L-MOUNT BRACKET BLUEPRINT (Matches user photo media_1791279263846)
+            const webH = drawH * 0.65;
+            const flangeH = drawH * 0.35;
+            const rFillet = 8 * (scale / 1.5);
+
+            // 1. Draw Upright Web with filleted top corners & side waist cutouts
+            ctx.fillStyle = c.partFill;
+            ctx.strokeStyle = c.partOutline;
+            ctx.lineWidth = 2.2;
+
+            ctx.beginPath();
+            ctx.moveTo(originX, originY + webH);
+            // Left waist cutout
+            ctx.lineTo(originX, originY + webH * 0.58);
+            ctx.arc(originX, originY + webH * 0.46, 8 * (scale / 1.5), Math.PI / 2, -Math.PI / 2, true);
+            ctx.lineTo(originX, originY + rFillet);
+            ctx.arc(originX + rFillet, originY + rFillet, rFillet, Math.PI, 1.5 * Math.PI, false);
+            // Top edge & tab
+            ctx.lineTo(originX + drawW - rFillet, originY);
+            ctx.arc(originX + drawW - rFillet, originY + rFillet, rFillet, -Math.PI / 2, 0, false);
+            // Right waist cutout
+            ctx.lineTo(originX + drawW, originY + webH * 0.34);
+            ctx.arc(originX + drawW, originY + webH * 0.46, 8 * (scale / 1.5), -Math.PI / 2, Math.PI / 2, true);
+            ctx.lineTo(originX + drawW, originY + webH);
+            // Base flange outline extending down
+            ctx.lineTo(originX + drawW, originY + webH + flangeH - rFillet);
+            ctx.arc(originX + drawW - rFillet, originY + webH + flangeH - rFillet, rFillet, 0, Math.PI / 2, false);
+            ctx.lineTo(originX + rFillet, originY + webH + flangeH);
+            ctx.arc(originX + rFillet, originY + webH + flangeH - rFillet, rFillet, Math.PI / 2, Math.PI, false);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // 2. Center Motor Bore with Center Cross & Leader
+            const boreDiaMm = features.boreID || 36;
+            const boreRPx = (boreDiaMm / 2) * scale;
+            const boreX = originX + drawW / 2;
+            const boreY = originY + webH * 0.48;
+
+            ctx.beginPath();
+            ctx.arc(boreX, boreY, boreRPx, 0, Math.PI * 2);
+            ctx.fillStyle = c.bg;
+            ctx.fill();
+            ctx.strokeStyle = c.holes;
+            ctx.lineWidth = 2.0;
+            ctx.stroke();
+            this.drawCenterMark(ctx, boreX, boreY, boreRPx + 10, c.centerlines);
+            this.drawHoleLeaderCallout(ctx, boreX, boreY, boreRPx, boreX + boreRPx + 35, boreY - 26, `⌀${boreDiaMm.toFixed(1)} mm THRU [MOTOR BORE]`, c);
+
+            // 3. Top Mounting Holes
+            const topHoleRPx = (6.5 / 2) * scale;
+            const th1X = originX + 16 * scale;
+            const th2X = originX + drawW - 16 * scale;
+            const thY = originY + 14 * scale;
+
+            [th1X, th2X].forEach(tx => {
+                ctx.beginPath();
+                ctx.arc(tx, thY, topHoleRPx, 0, Math.PI * 2);
+                ctx.fillStyle = c.bg; ctx.fill();
+                ctx.strokeStyle = c.holes; ctx.lineWidth = 1.8; ctx.stroke();
+                this.drawCenterMark(ctx, tx, thY, topHoleRPx + 6, c.centerlines);
+            });
+            this.drawHoleLeaderCallout(ctx, th2X, thY, topHoleRPx, th2X + 25, thY - 22, `2× ⌀6.5 mm THRU [TOP MOUNT]`, c);
+
+            // 4. Base Flange Mounting Holes
+            const bHoleY = originY + webH + flangeH * 0.58;
+            const bh1X = originX + 22 * scale;
+            const bh2X = originX + drawW - 22 * scale;
+
+            [bh1X, bh2X].forEach(bx => {
+                ctx.beginPath();
+                ctx.arc(bx, bHoleY, topHoleRPx, 0, Math.PI * 2);
+                ctx.fillStyle = c.bg; ctx.fill();
+                ctx.strokeStyle = c.holes; ctx.lineWidth = 1.8; ctx.stroke();
+                this.drawCenterMark(ctx, bx, bHoleY, topHoleRPx + 6, c.centerlines);
+            });
+            this.drawHoleLeaderCallout(ctx, bh2X, bHoleY, topHoleRPx, bh2X + 25, bHoleY + 22, `2× ⌀6.5 mm THRU [BASE MOUNT]`, c);
+
+            // 5. Bend Lines (Dashed Magenta)
+            ctx.strokeStyle = c.bendLine;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([7, 4]);
+
+            // Bend Line 1: Web to Base Flange
+            ctx.beginPath();
+            ctx.moveTo(originX, originY + webH);
+            ctx.lineTo(originX + drawW, originY + webH);
+            ctx.stroke();
+
+            // Bend Line 2: Web to Top Tab
+            const tabW = drawW * 0.44;
+            const tabX = originX + (drawW - tabW) / 2;
+            ctx.beginPath();
+            ctx.moveTo(tabX, originY);
+            ctx.lineTo(tabX + tabW, originY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Bend Line Labels
+            ctx.font = 'bold 9px monospace';
+            ctx.fillStyle = c.bendLine;
+            ctx.fillText('BEND UP 90° (R=2.0 mm)', originX + 8, originY + webH - 6);
+            ctx.fillText('BEND DOWN 90° (R=2.0 mm)', tabX + 4, originY - 6);
+
+            // 6. GD&T Dimensions
+            // Overall Width
+            this.drawLinearDimension(ctx, originX, originY + webH + flangeH, originX + drawW, originY + webH + flangeH, 26, `${partW.toFixed(1)} mm`, 'horizontal', c);
+            // Web Height
+            this.drawLinearDimension(ctx, originX, originY + webH, originX, originY, -28, `${partH.toFixed(1)} mm`, 'vertical', c);
+            // Flange Depth
+            const flDepth = dimensions.depth || 52;
+            this.drawLinearDimension(ctx, originX, originY + webH + flangeH, originX, originY + webH, -28, `${flDepth.toFixed(1)} mm FLANGE`, 'vertical', c);
+
+            ctx.restore();
+            return;
+        }
 
         if (contours && contours.length > 0) {
             // Find outer bounding box
@@ -506,7 +623,7 @@ window.CadDrawingGenerator = {
         ctx.restore();
     },
 
-    renderFrontView(ctx, bounds, dimensions, thickness, c) {
+    renderFrontView(ctx, bounds, dimensions, thickness, c, data = {}) {
         const padX = 65;
         const padY = 20;
         const availW = bounds.w - padX * 2;
@@ -523,6 +640,52 @@ window.CadDrawingGenerator = {
         const originY = bounds.y + padY + (availH - drawH) / 2;
 
         ctx.save();
+
+        if (data.sheetMetalType === 'motor' || data.partName?.includes('MOTOR') || data.partName?.includes('L-MOUNT')) {
+            // Render Folded L-shape front elevation with formed cylindrical bends
+            const tPx = Math.max(3, (data.thickness || 2.0) * scale * 1.8);
+            const flDepthPx = Math.min(drawW * 0.55, (dimensions.depth || 52) * scale);
+            const uprightHPx = drawH - 10;
+            const rBendPx = 6 * (scale / 1.5);
+
+            ctx.fillStyle = c.partFill;
+            ctx.strokeStyle = c.partOutline;
+            ctx.lineWidth = 2.2;
+
+            ctx.beginPath();
+            // Start at bottom tip of forward base flange
+            ctx.moveTo(originX + flDepthPx, originY + drawH);
+            ctx.lineTo(originX + rBendPx, originY + drawH);
+            // Outer bend radius arc
+            ctx.arc(originX + rBendPx, originY + drawH - rBendPx, rBendPx, Math.PI / 2, Math.PI, false);
+            // Upright back face
+            ctx.lineTo(originX, originY + drawH - uprightHPx);
+            // Top tab rearward lip
+            ctx.lineTo(originX - 16 * (scale / 1.5), originY + drawH - uprightHPx);
+            ctx.lineTo(originX - 16 * (scale / 1.5), originY + drawH - uprightHPx + tPx);
+            ctx.lineTo(originX + tPx, originY + drawH - uprightHPx + tPx);
+            // Upright inner face down to inner bend
+            ctx.lineTo(originX + tPx, originY + drawH - tPx - (rBendPx - tPx));
+            ctx.arc(originX + rBendPx, originY + drawH - rBendPx, Math.max(1, rBendPx - tPx), Math.PI, Math.PI / 2, true);
+            // Flange inner top face to tip
+            ctx.lineTo(originX + flDepthPx, originY + drawH - tPx);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Dimensions on Front View
+            this.drawLinearDimension(ctx, originX, originY + drawH, originX + flDepthPx, originY + drawH, 18, `${(dimensions.depth || 52).toFixed(1)} mm FLANGE`, 'horizontal', c);
+            this.drawLinearDimension(ctx, originX, originY + drawH, originX, originY + drawH - uprightHPx, -22, `${partW.toFixed(1)} mm HEIGHT`, 'vertical', c);
+            this.drawLinearDimension(ctx, originX + flDepthPx, originY + drawH - tPx, originX + flDepthPx, originY + drawH, 18, `THK ${data.thickness || 2.0} mm`, 'vertical', c);
+
+            // Bend annotation
+            ctx.font = 'bold 9px monospace';
+            ctx.fillStyle = c.bendLine;
+            ctx.fillText('R=2.0 mm INNER BEND', originX + rBendPx + 6, originY + drawH - tPx - 6);
+
+            ctx.restore();
+            return;
+        }
 
         // Sheet Metal Bent Cross Section (Base plate + Vertical flange + Lip)
         const tPx = Math.max(2.5, thickness * scale * 1.5);
@@ -573,10 +736,10 @@ window.CadDrawingGenerator = {
         ctx.restore();
     },
 
-    renderIsometricView(ctx, bounds, dimensions, thickness, c) {
+    renderIsometricView(ctx, bounds, dimensions, thickness, c, data = {}) {
         const cx = bounds.x + bounds.w / 2;
         const cy = bounds.y + bounds.h / 2 + 10;
-        const s = Math.min(bounds.w, bounds.h) * 0.42;
+        const s = Math.min(bounds.w, bounds.h) * 0.44;
 
         ctx.save();
         ctx.strokeStyle = c.partOutline;
@@ -590,6 +753,72 @@ window.CadDrawingGenerator = {
             px: cx + (x - y) * cos30 * (s / 100),
             py: cy + (x + y) * sin30 * (s / 100) - z * (s / 100)
         });
+
+        if (data.sheetMetalType === 'motor' || data.partName?.includes('MOTOR') || data.partName?.includes('L-MOUNT')) {
+            // Render 3D Axonometric of Formed L-Bracket
+            const f0 = project(-45, -40, 0);
+            const f1 = project(45, -40, 0);
+            const f2 = project(45, 10, 0);
+            const f3 = project(-45, 10, 0);
+
+            const w0 = project(-45, 10, 75);
+            const w1 = project(45, 10, 75);
+
+            const t0 = project(-20, 35, 75);
+            const t1 = project(20, 35, 75);
+
+            // Draw Base Flange
+            ctx.beginPath();
+            ctx.moveTo(f0.px, f0.py);
+            ctx.lineTo(f1.px, f1.py);
+            ctx.lineTo(f2.px, f2.py);
+            ctx.lineTo(f3.px, f3.py);
+            ctx.closePath();
+            ctx.fillStyle = c.partFill;
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw Upright Web
+            ctx.beginPath();
+            ctx.moveTo(f3.px, f3.py);
+            ctx.lineTo(f2.px, f2.py);
+            ctx.lineTo(w1.px, w1.py);
+            ctx.lineTo(w0.px, w0.py);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw Top Tab
+            ctx.beginPath();
+            ctx.moveTo(project(-20, 10, 75).px, project(-20, 10, 75).py);
+            ctx.lineTo(t0.px, t0.py);
+            ctx.lineTo(t1.px, t1.py);
+            ctx.lineTo(project(20, 10, 75).px, project(20, 10, 75).py);
+            ctx.stroke();
+
+            // Draw Motor Bore in Web
+            const boreCenter = project(0, 10, 38);
+            ctx.beginPath();
+            ctx.ellipse(boreCenter.px, boreCenter.py, 18 * (s / 100), 10 * (s / 100), Math.PI / 6, 0, Math.PI * 2);
+            ctx.strokeStyle = c.holes;
+            ctx.stroke();
+
+            // Draw Flange Holes
+            [project(-24, -18, 0), project(24, -18, 0)].forEach(p => {
+                ctx.beginPath();
+                ctx.ellipse(p.px, p.py, 5 * (s / 100), 3 * (s / 100), 0, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+
+            // Feature labels
+            ctx.font = 'bold 9px monospace';
+            ctx.fillStyle = c.bendLine;
+            const bendP = project(45, 10, 0);
+            ctx.fillText('90° FORMED BEND', bendP.px + 6, bendP.py - 4);
+
+            ctx.restore();
+            return;
+        }
 
         const p0 = project(-50, -45, 0);
         const p1 = project(50, -45, 0);

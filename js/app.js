@@ -5,8 +5,10 @@
 
 class ImageToCadApp {
     constructor() {
-        this.currentMode = 'extrude'; // 'extrude', 'revolve', 'relief', 'parametric'
+        this.currentMode = 'sheetmetal'; // Default to Sheet Metal mode for engineering workflow
         this.inputMode = 'upload';    // 'upload', 'preset', 'sketch'
+        this.sheetMetalType = 'motor'; // 'motor' (Formed L-Mount) or 'chassis' (Chassis Multi-Flange)
+        this.sheetMetalForm = 'folded'; // 'folded' (3D Solid) or 'flat' (Unfolded Blank)
         this.currentImg = null;
         this.processedData = null;
         this.currentContours = [];
@@ -214,6 +216,26 @@ class ImageToCadApp {
         if (clipSlider) clipSlider.addEventListener('input', updateClip);
         if (clipAxisSelect) clipAxisSelect.addEventListener('change', updateClip);
 
+        // Sheet Metal Architecture Selection (Formed L-Mount vs Chassis Bracket)
+        const btnSmTypeMotor = document.getElementById('btn-sm-type-motor');
+        const btnSmTypeChassis = document.getElementById('btn-sm-type-chassis');
+        if (btnSmTypeMotor) {
+            btnSmTypeMotor.addEventListener('click', () => this.setSheetMetalType('motor'));
+        }
+        if (btnSmTypeChassis) {
+            btnSmTypeChassis.addEventListener('click', () => this.setSheetMetalType('chassis'));
+        }
+
+        // Sheet Metal CAD Manufacturing State (3D Folded Solid vs Flat Blank)
+        const btnSmFormFolded = document.getElementById('btn-sm-form-folded');
+        const btnSmFormFlat = document.getElementById('btn-sm-form-flat');
+        if (btnSmFormFolded) {
+            btnSmFormFolded.addEventListener('click', () => this.setSheetMetalForm('folded'));
+        }
+        if (btnSmFormFlat) {
+            btnSmFormFlat.addEventListener('click', () => this.setSheetMetalForm('flat'));
+        }
+
         // Pull to 3D Graphic Window Action (Sidebar & Header)
         const triggerPullTo3d = () => {
             if (!this.currentImg) {
@@ -221,10 +243,20 @@ class ImageToCadApp {
                 return;
             }
             this.hasCustomImage = true;
-            this.setMode('extrude', false);
+            // Intelligently preserve mode or detect if uploaded image is sheetmetal/bracket
+            if (this.currentMode === 'extrude') {
+                if (this.lastFeatures && (this.lastFeatures.isMotorBracket || this.lastFeatures.isChassisBracket)) {
+                    this.setMode('sheetmetal', false);
+                    if (this.lastFeatures.isMotorBracket) {
+                        this.setSheetMetalType('motor');
+                    } else if (this.lastFeatures.isChassisBracket) {
+                        this.setSheetMetalType('chassis');
+                    }
+                }
+            }
             this.processAndGenerate();
             this.viewport.setView('iso');
-            this.showToast('⚡ Pulled detected contours into 3D Graphic Window!', 'info');
+            this.showToast('⚡ Pulled finished CAD solid into 3D Graphic Window!', 'info');
         };
 
         const pullTo3dBtn = document.getElementById('btn-pull-to-3d');
@@ -358,6 +390,9 @@ class ImageToCadApp {
         if (!preset) return;
 
         this.hasCustomImage = false;
+        if (preset.bracketType) {
+            this.setSheetMetalType(preset.bracketType === 'formed_l' ? 'motor' : 'chassis');
+        }
         this.setMode(preset.recommendedMode, false);
         const dataUrl = preset.generate();
         await this.loadFromDataUrl(dataUrl, preset.name);
@@ -568,6 +603,30 @@ class ImageToCadApp {
         }
     }
 
+    setSheetMetalType(type) {
+        this.sheetMetalType = type;
+        const btnMotor = document.getElementById('btn-sm-type-motor');
+        const btnChassis = document.getElementById('btn-sm-type-chassis');
+        const grpMotor = document.getElementById('group-sm-motor');
+        const grpChassis = document.getElementById('group-sm-chassis');
+
+        if (btnMotor) btnMotor.classList.toggle('active', type === 'motor');
+        if (btnChassis) btnChassis.classList.toggle('active', type === 'chassis');
+        if (grpMotor) grpMotor.classList.toggle('hidden', type !== 'motor');
+        if (grpChassis) grpChassis.classList.toggle('hidden', type !== 'chassis');
+        this.scheduleRegenerate();
+    }
+
+    setSheetMetalForm(form) {
+        this.sheetMetalForm = form;
+        const btnFolded = document.getElementById('btn-sm-form-folded');
+        const btnFlat = document.getElementById('btn-sm-form-flat');
+
+        if (btnFolded) btnFolded.classList.toggle('active', form === 'folded');
+        if (btnFlat) btnFlat.classList.toggle('active', form === 'flat');
+        this.scheduleRegenerate();
+    }
+
     setInputSource(source) {
         this.inputMode = source;
         document.querySelectorAll('.input-tab').forEach(t => {
@@ -640,32 +699,60 @@ class ImageToCadApp {
                 let cadResult = null;
 
                 if (this.currentMode === 'sheetmetal') {
-                    if (this.hasCustomImage && contours && contours.length > 0) {
-                        // Extrude uploaded custom image contours with sheet gauge thickness
-                        const thickness = parseFloat(document.getElementById('param-sm-thick').value);
-                        const targetWidthMm = parseFloat(document.getElementById('param-width').value);
-                        const epsilon = parseFloat(document.getElementById('param-epsilon').value);
+                    const isFlat = (this.sheetMetalForm === 'flat');
+                    const thickness = parseFloat(document.getElementById('param-sm-thick')?.value) || 2.0;
+                    const bendRadius = parseFloat(document.getElementById('param-sm-bend-r')?.value) || 2.0;
 
-                        cadResult = window.CadGenerator.createExtrudedSolid(contours, {
-                            depth: thickness,
-                            bevelEnabled: true,
-                            bevelThickness: 0.2,
-                            bevelSize: 0.2,
-                            targetWidthMm,
-                            epsilon
+                    if (this.sheetMetalType === 'motor') {
+                        let boreDia = parseFloat(document.getElementById('param-sm-bore')?.value) || 36;
+                        let width = parseFloat(document.getElementById('param-sm-motor-w')?.value) || 110;
+                        let height = parseFloat(document.getElementById('param-sm-motor-h')?.value) || 100;
+                        const baseLen = parseFloat(document.getElementById('param-sm-base-len')?.value) || 52;
+                        const topLen = parseFloat(document.getElementById('param-sm-top-len')?.value) || 26;
+                        const holeDia = parseFloat(document.getElementById('param-sm-motor-hole')?.value) || 6.5;
+                        const fillet = parseFloat(document.getElementById('param-sm-fillet')?.value) || 6.0;
+                        const waist = document.getElementById('param-sm-waist')?.checked ?? true;
+
+                        // Auto-scale bore and width from detected image features if user uploaded an image
+                        if (this.hasCustomImage && features) {
+                            if (features.centerBoreRatio > 0) {
+                                const detectedBoreMm = Math.round(width * Math.max(0.2, features.centerBoreRatio));
+                                if (detectedBoreMm >= 18 && detectedBoreMm <= 75) {
+                                    boreDia = detectedBoreMm;
+                                    const bSlider = document.getElementById('param-sm-bore');
+                                    const bVal = document.getElementById('param-sm-bore-val');
+                                    if (bSlider) bSlider.value = boreDia;
+                                    if (bVal) bVal.textContent = boreDia;
+                                }
+                            }
+                        }
+
+                        cadResult = window.CadGenerator.createFormedMotorBracket({
+                            thickness,
+                            width,
+                            height,
+                            baseLength: baseLen,
+                            topTabLength: topLen,
+                            topTabWidth: Math.round(width * 0.44),
+                            boreDia,
+                            holeDia,
+                            bendRadius,
+                            cornerFillet: fillet,
+                            hasWaistCutouts: waist,
+                            isFlat
                         });
+                        this.currentPartName = isFlat ? 'FORMED L-MOUNT BRACKET (FLAT BLANK)' : 'FORMED L-MOUNT BRACKET';
                     } else {
-                        // Parametric Chassis Bracket preset
-                        const thickness = parseFloat(document.getElementById('param-sm-thick').value);
-                        const width = parseFloat(document.getElementById('param-sm-width').value);
-                        const height = parseFloat(document.getElementById('param-sm-height').value);
-                        const sideDepth = parseFloat(document.getElementById('param-sm-side-depth').value);
-                        const topTab = parseFloat(document.getElementById('param-sm-top-tab').value);
-                        const footLen = parseFloat(document.getElementById('param-sm-foot-len').value);
-                        const notchW = parseFloat(document.getElementById('param-sm-notch-w').value);
-                        const notchH = parseFloat(document.getElementById('param-sm-notch-h').value);
-                        const holeDia = parseFloat(document.getElementById('param-sm-hole-dia').value);
-                        const gusset = document.getElementById('param-sm-gusset').checked;
+                        // Parametric Chassis Multi-Flange Bracket
+                        const width = parseFloat(document.getElementById('param-sm-width')?.value) || 115;
+                        const height = parseFloat(document.getElementById('param-sm-height')?.value) || 105;
+                        const sideDepth = parseFloat(document.getElementById('param-sm-side-depth')?.value) || 52;
+                        const topTab = parseFloat(document.getElementById('param-sm-top-tab')?.value) || 32;
+                        const footLen = parseFloat(document.getElementById('param-sm-foot-len')?.value) || 48;
+                        const notchW = parseFloat(document.getElementById('param-sm-notch-w')?.value) || 34;
+                        const notchH = parseFloat(document.getElementById('param-sm-notch-h')?.value) || 60;
+                        const holeDia = parseFloat(document.getElementById('param-sm-hole-dia')?.value) || 6.5;
+                        const gusset = document.getElementById('param-sm-gusset')?.checked ?? true;
 
                         cadResult = window.CadGenerator.createSheetMetalBracket({
                             thickness,
@@ -677,9 +764,12 @@ class ImageToCadApp {
                             notchWidth: notchW,
                             notchHeight: notchH,
                             holeDia,
+                            bendRadius,
                             hasGusset: gusset,
-                            hasTabs: true
+                            hasTabs: true,
+                            isFlat
                         });
+                        this.currentPartName = isFlat ? 'CHASSIS BRACKET (FLAT PATTERN)' : 'CHASSIS SHEET METAL BRACKET';
                     }
                 } else if (this.currentMode === 'extrude') {
                     const depth = parseFloat(document.getElementById('param-extrude-depth').value);
@@ -898,16 +988,18 @@ class ImageToCadApp {
         const canvas = document.getElementById('drawing-canvas');
         if (!canvas || !window.CadDrawingGenerator) return;
 
-        const dimensions = this.currentDimensions || { width: 115, height: 105, depth: 15 };
-        const thickness = parseFloat(document.getElementById('param-sm-thick') ? document.getElementById('param-sm-thick').value : 1.8);
-        const features = this.lastFeatures || { flangeOD: 115, boreID: 34, boltCount: 4, boltDiameter: 6.5 };
+        const dimensions = this.currentDimensions || { width: 110, height: 100, depth: 52 };
+        const thickness = parseFloat(document.getElementById('param-sm-thick') ? document.getElementById('param-sm-thick').value : 2.0);
+        const features = this.lastFeatures || { flangeOD: 110, boreID: 36, boltCount: 4, boltDiameter: 6.5 };
 
         window.CadDrawingGenerator.renderDrawing(canvas, {
             contours: this.currentContours,
             dimensions,
             thickness,
-            partName: this.currentPartName || 'SHEET METAL BRACKET',
-            drawingNo: 'DWG-CATIA-' + Math.floor(1000 + Math.random() * 9000),
+            sheetMetalType: this.sheetMetalType,
+            sheetMetalForm: this.sheetMetalForm,
+            partName: this.currentPartName || (this.sheetMetalType === 'motor' ? 'FORMED L-MOUNT BRACKET' : 'CHASSIS SHEET METAL BRACKET'),
+            drawingNo: 'DWG-CATIA-2026',
             material: 'ALUMINIUM 6061-T6',
             scaleRatio: '1:1',
             features

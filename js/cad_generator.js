@@ -552,34 +552,59 @@ window.CadGenerator = {
         };
     },
 
-    // Mode 5: Folded Sheet Metal Chassis Bracket (Matches user photo & 4 highlighted features)
-    createSheetMetalBracket(params = {}) {
+    // Mode 5 Helper: Cylindrical Press-Brake Bend Sector
+    makeCurvedBend(length, innerR, thickness, arcStart, arcEnd, segments = 16) {
+        const rIn = Math.max(0.4, innerR);
+        const rOut = rIn + thickness;
+        const shape = new THREE.Shape();
+        shape.absarc(0, 0, rOut, arcStart, arcEnd, false);
+        shape.lineTo(rIn * Math.cos(arcEnd), rIn * Math.sin(arcEnd));
+        shape.absarc(0, 0, rIn, arcEnd, arcStart, true);
+        shape.closePath();
+
+        const geom = new THREE.ExtrudeGeometry(shape, {
+            steps: 1,
+            depth: length,
+            bevelEnabled: false,
+            curveSegments: segments
+        });
+        return geom;
+    },
+
+    // Mode 5A: Formed L-Mount Bracket with Large Central Motor Bore & 90° Flanges
+    // (Matches user upload media_1791279263846 with CATIA-grade formed bends and detailed ends)
+    createFormedMotorBracket(params = {}) {
         const {
-            thickness = 1.8,       // Sheet metal gauge (mm)
-            width = 115,           // Base plate width (mm)
-            height = 105,          // Base plate height (mm)
-            sideDepth = 52,        // Right bent channel / sidewall depth (mm)
-            notchWidth = 34,       // Center clearance notch width (mm)
-            notchHeight = 60,      // Center clearance notch height (mm)
-            notchX = 36,           // Notch start position from left (mm)
+            thickness = 2.0,       // Sheet metal gauge (mm)
+            width = 110,           // Base upright plate width (mm)
+            height = 100,          // Base upright plate height (mm)
+            baseLength = 52,       // Bottom base flange depth (mm)
+            topTabLength = 26,     // Top rear bent tab length (mm)
+            topTabWidth = 48,      // Top bent tab width (mm)
+            boreDia = 36,          // Center motor/bearing clearance bore (mm)
             holeDia = 6.5,         // Standard mounting hole diameter (mm)
-            hasGusset = true,      // Triangular stiffener gusset
-            hasTabs = true         // Small upright bent tabs
+            bendRadius = 2.0,      // Press-brake inner bend radius (mm)
+            cornerFillet = 6.0,    // Corner rounding radius (mm)
+            hasWaistCutouts = true,// Side waist clearance cutouts
+            isFlat = false         // If true, generate unfolded sheet blank for laser cutting
         } = params;
 
         const geoms = [];
         const t = Math.max(0.8, thickness);
+        const rIn = Math.max(0.5, bendRadius);
+        const rOut = rIn + t;
         const rHole = holeDia / 2;
+        const rBore = boreDia / 2;
 
-        // Helper to extrude plate with bevel and transform
         const makePlate = (shape, depth, rotX = 0, rotY = 0, rotZ = 0, tx = 0, ty = 0, tz = 0) => {
             const geom = new THREE.ExtrudeGeometry(shape, {
                 steps: 1,
                 depth: depth,
                 bevelEnabled: true,
-                bevelThickness: 0.2,
-                bevelSize: 0.2,
-                bevelSegments: 1
+                bevelThickness: 0.18,
+                bevelSize: 0.18,
+                bevelSegments: 1,
+                curveSegments: 24
             });
             if (rotX) geom.rotateX(rotX);
             if (rotY) geom.rotateY(rotY);
@@ -593,6 +618,252 @@ window.CadGenerator = {
             h.absarc(x, y, r, 0, Math.PI * 2, true);
             s.holes.push(h);
         };
+
+        if (isFlat) {
+            // UNFOLDED 2D FLAT PATTERN (CATIA Laser-cut Blank)
+            const blank = new THREE.Shape();
+            const ba = (Math.PI / 2) * (rIn + 0.44 * t); // Bend allowance
+            const totalH = height + baseLength + topTabLength + ba * 2;
+            const tabStartX = (width - topTabWidth) / 2;
+
+            // Trace outer perimeter of unfolded blank
+            blank.moveTo(cornerFillet, -baseLength - ba);
+            blank.lineTo(width - cornerFillet, -baseLength - ba);
+            blank.absarc(width - cornerFillet, -baseLength - ba + cornerFillet, cornerFillet, -Math.PI / 2, 0, false);
+            blank.lineTo(width, 0);
+            blank.lineTo(width, height);
+            blank.lineTo(tabStartX + topTabWidth, height);
+            blank.lineTo(tabStartX + topTabWidth, height + topTabLength + ba - 4);
+            blank.absarc(tabStartX + topTabWidth - 4, height + topTabLength + ba - 4, 4, 0, Math.PI / 2, false);
+            blank.lineTo(tabStartX + 4, height + topTabLength + ba);
+            blank.absarc(tabStartX + 4, height + topTabLength + ba - 4, 4, Math.PI / 2, Math.PI, false);
+            blank.lineTo(tabStartX, height);
+            blank.lineTo(0, height);
+            blank.lineTo(0, 0);
+            blank.lineTo(0, -baseLength - ba + cornerFillet);
+            blank.absarc(cornerFillet, -baseLength - ba + cornerFillet, cornerFillet, Math.PI, 1.5 * Math.PI, false);
+            blank.closePath();
+
+            // Center motor bore
+            addHole(blank, width / 2, height * 0.52, rBore);
+
+            // Upright mounting holes
+            addHole(blank, 16, height - 16, rHole);
+            addHole(blank, width - 16, height - 16, rHole);
+
+            // Base flange mounting holes
+            addHole(blank, 24, -baseLength * 0.55 - ba, rHole);
+            addHole(blank, width - 24, -baseLength * 0.55 - ba, rHole);
+
+            const flatGeom = new THREE.ExtrudeGeometry(blank, { steps: 1, depth: t, bevelEnabled: false, curveSegments: 32 });
+            flatGeom.computeVertexNormals();
+
+            return {
+                geometry: flatGeom,
+                dimensions: { width, height: totalH, depth: t },
+                isFlat: true,
+                partName: 'FORMED L-MOUNT BRACKET (FLAT BLANK)'
+            };
+        }
+
+        // 3D FOLDED SOLID MODEL (CATIA Sheet Metal with formed cylindrical bends)
+
+        // 1. Main Upright Web
+        const webH = height - rOut * 2;
+        const web = new THREE.Shape();
+        web.moveTo(0, 0);
+        web.lineTo(width, 0);
+        // Right side waist cutout if enabled
+        if (hasWaistCutouts) {
+            const cutY = webH * 0.38;
+            web.lineTo(width, cutY);
+            web.absarc(width, cutY + 10, 8, -Math.PI / 2, Math.PI / 2, true); // Inward notch
+            web.lineTo(width, webH - cornerFillet);
+        } else {
+            web.lineTo(width, webH - cornerFillet);
+        }
+        // Top-right corner fillet
+        web.absarc(width - cornerFillet, webH - cornerFillet, cornerFillet, 0, Math.PI / 2, false);
+        // Top-left corner fillet
+        web.lineTo(cornerFillet, webH);
+        web.absarc(cornerFillet, webH - cornerFillet, cornerFillet, Math.PI / 2, Math.PI, false);
+        // Left side waist cutout if enabled
+        if (hasWaistCutouts) {
+            const cutY = webH * 0.38;
+            web.lineTo(0, cutY + 20);
+            web.absarc(0, cutY + 10, 8, Math.PI / 2, -Math.PI / 2, true); // Inward notch
+            web.lineTo(0, 0);
+        } else {
+            web.lineTo(0, 0);
+        }
+        web.closePath();
+
+        // Add large central motor/clearance bore
+        addHole(web, width / 2, webH * 0.48, rBore);
+
+        // Add top-left and top-right precision mounting holes
+        addHole(web, 16, webH - 14, rHole);
+        addHole(web, width - 16, webH - 14, rHole);
+
+        // Extrude vertical plate (located at y = rOut, z in [0, t])
+        geoms.push(makePlate(web, t, 0, 0, 0, 0, rOut, 0));
+
+        // 2. Bottom 90° Cylindrical Press-Brake Bend (connecting Web to Forward Base Flange)
+        // Curves smoothly from (y = rOut, z in [0, t]) to (y in [0, t], z = rOut)
+        const bottomBend = this.makeCurvedBend(width, rIn, t, Math.PI, 1.5 * Math.PI, 20);
+        bottomBend.rotateY(Math.PI / 2);
+        bottomBend.translate(0, rOut, rOut);
+        geoms.push(bottomBend);
+
+        // 3. Horizontal Base Flange (extends forward in +Z)
+        const baseFlangeLen = baseLength - rOut;
+        const flange = new THREE.Shape();
+        flange.moveTo(0, 0);
+        flange.lineTo(width, 0);
+        // Front-right corner fillet
+        flange.lineTo(width, baseFlangeLen - cornerFillet - 2);
+        flange.absarc(width - (cornerFillet + 2), baseFlangeLen - (cornerFillet + 2), cornerFillet + 2, 0, Math.PI / 2, false);
+        // Front-left corner fillet
+        flange.lineTo(cornerFillet + 2, baseFlangeLen);
+        flange.absarc(cornerFillet + 2, baseFlangeLen - (cornerFillet + 2), cornerFillet + 2, Math.PI / 2, Math.PI, false);
+        flange.closePath();
+
+        // 2 Precision mounting holes on bottom base flange
+        addHole(flange, 22, baseFlangeLen * 0.58, rHole);
+        addHole(flange, width - 22, baseFlangeLen * 0.58, rHole);
+
+        // Plate in XZ plane: rotateX(-PI/2), translate to (0, 0, rOut)
+        geoms.push(makePlate(flange, t, -Math.PI / 2, 0, 0, 0, 0, rOut));
+
+        // 4. Top 90° Cylindrical Press-Brake Bend (connecting Web to Rear Top Tab)
+        // Tab width is centered
+        const tabX = (width - topTabWidth) / 2;
+        const topBend = this.makeCurvedBend(topTabWidth, rIn, t, 0.5 * Math.PI, Math.PI, 20);
+        topBend.rotateY(Math.PI / 2);
+        topBend.translate(tabX, height - rOut, 0);
+        geoms.push(topBend);
+
+        // 5. Top Rear Bent Tab (extends backward in -Z)
+        const tabLen = topTabLength - rOut;
+        const tab = new THREE.Shape();
+        tab.moveTo(0, 0);
+        tab.lineTo(topTabWidth, 0);
+        // Rear-right corner fillet
+        tab.lineTo(topTabWidth, tabLen - 4);
+        tab.absarc(topTabWidth - 4, tabLen - 4, 4, 0, Math.PI / 2, false);
+        // Center cable notch
+        tab.lineTo(topTabWidth / 2 + 8, tabLen);
+        tab.lineTo(topTabWidth / 2 + 8, tabLen - 7);
+        tab.lineTo(topTabWidth / 2 - 8, tabLen - 7);
+        tab.lineTo(topTabWidth / 2 - 8, tabLen);
+        // Rear-left corner fillet
+        tab.lineTo(4, tabLen);
+        tab.absarc(4, tabLen - 4, 4, Math.PI / 2, Math.PI, false);
+        tab.closePath();
+
+        // Extrude and orient backward: rotateX(PI/2), translate
+        geoms.push(makePlate(tab, t, Math.PI / 2, 0, 0, tabX, height, 0));
+
+        // Merge all components into watertight BufferGeometry
+        const mergedGeometry = this.mergeGeometries(geoms);
+        mergedGeometry.computeVertexNormals();
+
+        return {
+            geometry: mergedGeometry,
+            dimensions: {
+                width: width,
+                height: height,
+                depth: baseLength + topTabLength
+            },
+            isFlat: false,
+            partName: 'FORMED L-MOUNT BRACKET'
+        };
+    },
+
+    // Mode 5B: Folded Sheet Metal Chassis Bracket (Matches user photo & 4 highlighted features)
+    createSheetMetalBracket(params = {}) {
+        const {
+            thickness = 1.8,       // Sheet metal gauge (mm)
+            width = 115,           // Base plate width (mm)
+            height = 105,          // Base plate height (mm)
+            sideDepth = 52,        // Right bent channel / sidewall depth (mm)
+            notchWidth = 34,       // Center clearance notch width (mm)
+            notchHeight = 60,      // Center clearance notch height (mm)
+            notchX = 36,           // Notch start position from left (mm)
+            holeDia = 6.5,         // Standard mounting hole diameter (mm)
+            bendRadius = 1.8,      // Inner bend radius (mm)
+            hasGusset = true,      // Triangular stiffener gusset
+            hasTabs = true,        // Small upright bent tabs
+            isFlat = false         // If true, generate flat blank
+        } = params;
+
+        const geoms = [];
+        const t = Math.max(0.8, thickness);
+        const rIn = Math.max(0.4, bendRadius);
+        const rOut = rIn + t;
+        const rHole = holeDia / 2;
+
+        const makePlate = (shape, depth, rotX = 0, rotY = 0, rotZ = 0, tx = 0, ty = 0, tz = 0) => {
+            const geom = new THREE.ExtrudeGeometry(shape, {
+                steps: 1,
+                depth: depth,
+                bevelEnabled: true,
+                bevelThickness: 0.18,
+                bevelSize: 0.18,
+                bevelSegments: 1,
+                curveSegments: 24
+            });
+            if (rotX) geom.rotateX(rotX);
+            if (rotY) geom.rotateY(rotY);
+            if (rotZ) geom.rotateZ(rotZ);
+            if (tx || ty || tz) geom.translate(tx, ty, tz);
+            return geom;
+        };
+
+        const addHole = (s, x, y, r) => {
+            const h = new THREE.Path();
+            h.absarc(x, y, r, 0, Math.PI * 2, true);
+            s.holes.push(h);
+        };
+
+        if (isFlat) {
+            // UNFOLDED FLAT PATTERN FOR CHASSIS BRACKET
+            const blank = new THREE.Shape();
+            const footLen = params.bottomFootLength || 54;
+            const topTab = params.topTabLength || 42;
+
+            blank.moveTo(0, -footLen);
+            blank.lineTo(notchX, -footLen);
+            blank.lineTo(notchX, 0);
+            blank.lineTo(notchX + notchWidth, 0);
+            blank.lineTo(notchX + notchWidth, -sideDepth);
+            blank.lineTo(width, -sideDepth);
+            blank.lineTo(width + sideDepth, -sideDepth);
+            blank.lineTo(width + sideDepth, height);
+            blank.lineTo(width, height + sideDepth);
+            blank.lineTo(notchX + notchWidth, height);
+            blank.lineTo(notchX, height);
+            blank.lineTo(notchX, height + topTab);
+            blank.lineTo(0, height + topTab);
+            blank.lineTo(0, 0);
+            blank.closePath();
+
+            // Precision holes
+            addHole(blank, 14, height - 16, rHole);
+            addHole(blank, notchX + notchWidth + 14, height - 14, rHole * 1.15);
+            addHole(blank, 16, 26, rHole);
+            addHole(blank, notchX + notchWidth + 10, 34, rHole);
+
+            const flatGeom = new THREE.ExtrudeGeometry(blank, { steps: 1, depth: t, bevelEnabled: false, curveSegments: 32 });
+            flatGeom.computeVertexNormals();
+
+            return {
+                geometry: flatGeom,
+                dimensions: { width: width + sideDepth, height: height + footLen + topTab, depth: t },
+                isFlat: true,
+                partName: 'CHASSIS BRACKET (FLAT PATTERN)'
+            };
+        }
 
         // 1. Main Vertical Backplate with Inverted U-Notch & Mounting Holes
         const bp = new THREE.Shape();
@@ -634,15 +905,30 @@ window.CadGenerator = {
         zHoriz.closePath();
         geoms.push(makePlate(zHoriz, t, -Math.PI / 2, 0, 0, zTabX, height, 0));
 
+        // Cylindrical Bend 1: from backplate to horizontal forward
+        const zBend1 = this.makeCurvedBend(zTabW, rIn, t, Math.PI, 1.5 * Math.PI, 16);
+        zBend1.rotateY(Math.PI / 2);
+        zBend1.translate(zTabX, height, rOut);
+        geoms.push(zBend1);
+
         // Part B: Downward vertical lip with center pilot hole
         const zDown = new THREE.Shape();
         zDown.moveTo(0, 0);
         zDown.lineTo(zTabW, 0);
-        zDown.lineTo(zTabW, zTabDrop);
-        zDown.lineTo(0, zTabDrop);
+        zDown.lineTo(zTabW - 3, zTabDrop);
+        zDown.absarc(zTabW - 3, zTabDrop - 3, 3, 0, Math.PI / 2, false);
+        zDown.lineTo(3, zTabDrop);
+        zDown.absarc(3, zTabDrop - 3, 3, Math.PI / 2, Math.PI, false);
+        zDown.lineTo(0, 0);
         zDown.closePath();
         addHole(zDown, zTabW / 2, zTabDrop / 2, 2.5); // Hole in downward vertical face
         geoms.push(makePlate(zDown, t, 0, 0, 0, zTabX, height - zTabDrop, zTabForward));
+
+        // Cylindrical Bend 2: from horizontal to vertical down
+        const zBend2 = this.makeCurvedBend(zTabW, rIn, t, 0, 0.5 * Math.PI, 16);
+        zBend2.rotateY(Math.PI / 2);
+        zBend2.translate(zTabX, height - t, zTabForward - rOut);
+        geoms.push(zBend2);
 
         // 3. HIGHLIGHT 2: Top-Right Canopy Box with 45° Angled Finger Tab
         const rightBoxW = width - (notchX + notchWidth);
@@ -657,6 +943,12 @@ window.CadGenerator = {
         roof.closePath();
         geoms.push(makePlate(roof, t, -Math.PI / 2, 0, 0, rightBoxX, height, 0));
 
+        // Smooth bend connecting backplate to roof
+        const roofBend = this.makeCurvedBend(rightBoxW, rIn, t, Math.PI, 1.5 * Math.PI, 16);
+        roofBend.rotateY(Math.PI / 2);
+        roofBend.translate(rightBoxX, height, rOut);
+        geoms.push(roofBend);
+
         // Deep Right Sidewall
         const floorY = 24;
         const sideH = height - floorY;
@@ -669,14 +961,21 @@ window.CadGenerator = {
         addHole(side, sideDepth * 0.52, sideH * 0.52, 3.5); // Right sidewall hole
         geoms.push(makePlate(side, t, 0, -Math.PI / 2, 0, width, floorY, 0));
 
+        // Sidewall bend from roof
+        const sideBend = this.makeCurvedBend(sideDepth, rIn, t, 0, 0.5 * Math.PI, 16);
+        sideBend.rotateZ(-Math.PI / 2);
+        sideBend.translate(width - rOut, height, 0);
+        geoms.push(sideBend);
+
         // 45° Angled Finger Tab (descends into cavity from front of roof with pilot hole)
         const fingerW = 16;
         const fingerLen = 26;
         const finger = new THREE.Shape();
         finger.moveTo(0, 0);
         finger.lineTo(fingerW, 0);
-        finger.lineTo(fingerW, fingerLen);
-        finger.lineTo(0, fingerLen);
+        finger.lineTo(fingerW - 2, fingerLen);
+        finger.lineTo(2, fingerLen);
+        finger.lineTo(0, 0);
         finger.closePath();
         addHole(finger, fingerW / 2, fingerLen * 0.42, 2.2);
 
@@ -695,6 +994,12 @@ window.CadGenerator = {
         addHole(floor, rightBoxW * 0.5, sideDepth * 0.5, 8.5); // Large 17mm circular clearance hole
         geoms.push(makePlate(floor, t, -Math.PI / 2, 0, 0, rightBoxX, floorY, 0));
 
+        // Floor bend from backplate
+        const floorBend = this.makeCurvedBend(rightBoxW, rIn, t, Math.PI, 1.5 * Math.PI, 16);
+        floorBend.rotateY(Math.PI / 2);
+        floorBend.translate(rightBoxX, floorY + rOut, rOut);
+        geoms.push(floorBend);
+
         // Upright small corner tab at front-right corner of bottom floor
         if (hasTabs) {
             const cornerTabW = 14;
@@ -702,8 +1007,11 @@ window.CadGenerator = {
             const cornerTab = new THREE.Shape();
             cornerTab.moveTo(0, 0);
             cornerTab.lineTo(cornerTabW, 0);
-            cornerTab.lineTo(cornerTabW, cornerTabH);
-            cornerTab.lineTo(0, cornerTabH);
+            cornerTab.lineTo(cornerTabW - 2, cornerTabH);
+            cornerTab.absarc(cornerTabW - 2, cornerTabH - 2, 2, 0, Math.PI / 2, false);
+            cornerTab.lineTo(2, cornerTabH);
+            cornerTab.absarc(2, cornerTabH - 2, 2, Math.PI / 2, Math.PI, false);
+            cornerTab.lineTo(0, 0);
             cornerTab.closePath();
             addHole(cornerTab, cornerTabW / 2, cornerTabH / 2, 2.0); // Pilot hole
             geoms.push(makePlate(cornerTab, t, 0, -Math.PI / 2, 0, width, floorY, sideDepth - cornerTabW));
@@ -722,6 +1030,12 @@ window.CadGenerator = {
         addHole(foot, footW * 0.52, 26, 4.2); // 8.4mm foot mounting hole
         geoms.push(makePlate(foot, t, -Math.PI / 2, 0, 0, 0, 0, 0));
 
+        // Cylindrical bend for bottom-left foot
+        const footBend = this.makeCurvedBend(footW, rIn, t, Math.PI, 1.5 * Math.PI, 16);
+        footBend.rotateY(Math.PI / 2);
+        footBend.translate(0, rOut, rOut);
+        geoms.push(footBend);
+
         // Front upright bent tab at the tip of bottom-left foot
         if (hasTabs) {
             const frontTabW = 12;
@@ -729,8 +1043,11 @@ window.CadGenerator = {
             const frontTab = new THREE.Shape();
             frontTab.moveTo(0, 0);
             frontTab.lineTo(frontTabW, 0);
-            frontTab.lineTo(frontTabW, frontTabH);
-            frontTab.lineTo(0, frontTabH);
+            frontTab.lineTo(frontTabW - 2, frontTabH);
+            frontTab.absarc(frontTabW - 2, frontTabH - 2, 2, 0, Math.PI / 2, false);
+            frontTab.lineTo(2, frontTabH);
+            frontTab.absarc(2, frontTabH - 2, 2, Math.PI / 2, Math.PI, false);
+            frontTab.lineTo(0, 0);
             frontTab.closePath();
             addHole(frontTab, frontTabW / 2, frontTabH / 2, 2.0); // Pilot hole
             geoms.push(makePlate(frontTab, t, 0, 0, 0, footW - frontTabW, 0, footLen));
@@ -759,7 +1076,9 @@ window.CadGenerator = {
                 width: width,
                 height: height,
                 depth: sideDepth
-            }
+            },
+            isFlat: false,
+            partName: 'CHASSIS SHEET METAL BRACKET'
         };
     },
 

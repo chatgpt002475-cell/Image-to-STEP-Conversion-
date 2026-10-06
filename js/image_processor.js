@@ -248,8 +248,17 @@ window.ImageProcessor = {
         // Sort by area descending (largest outer contours first)
         contours.sort((a, b) => b.area - a.area);
 
-        // Cap to top 25 most significant contours to eliminate noisy speckles
-        const capped = contours.slice(0, 25);
+        const primaryArea = contours[0].area;
+        // Filter out tiny noise speckles (< 1.5% of primary area unless it's a candidate hole)
+        const filteredContours = contours.filter((c, idx) => {
+            if (idx === 0) return true;
+            if (c.area < 45) return false;
+            // Keep if reasonably sized
+            return c.area >= Math.min(60, primaryArea * 0.012);
+        });
+
+        // Cap to top 20 most significant contours to eliminate noisy speckles
+        const capped = filteredContours.slice(0, 20);
 
         const classified = capped.map(c => {
             const bbox = this.polygonBBox(c.points);
@@ -268,11 +277,11 @@ window.ImageProcessor = {
 
         for (let i = 1; i < classified.length; i++) {
             const current = classified[i];
-            // Check if BBox is strictly inside outer's BBox
-            if (current.bbox.minX >= outer.bbox.minX &&
-                current.bbox.maxX <= outer.bbox.maxX &&
-                current.bbox.minY >= outer.bbox.minY &&
-                current.bbox.maxY <= outer.bbox.maxY) {
+            // Check if BBox is inside outer's BBox
+            if (current.bbox.minX >= outer.bbox.minX - 4 &&
+                current.bbox.maxX <= outer.bbox.maxX + 4 &&
+                current.bbox.minY >= outer.bbox.minY - 4 &&
+                current.bbox.maxY <= outer.bbox.maxY + 4) {
                 
                 // Sample point test against simplified boundary
                 if (this.pointInPolygon(current.points[0], outerSimplified)) {
@@ -282,7 +291,14 @@ window.ImageProcessor = {
             }
         }
 
-        return classified;
+        // Further filter: only keep outer contours that are genuinely substantial
+        const result = classified.filter((c, idx) => {
+            if (idx === 0) return true;
+            if (c.isHole) return true;
+            return c.area >= primaryArea * 0.08; // Only separate parts if > 8% of main body
+        });
+
+        return result;
     },
 
     // Moore-Neighbor Tracing with step cap for safety
@@ -460,12 +476,23 @@ window.ImageProcessor = {
             estBoltDia = boltHoles.reduce((acc, h) => acc + h.dia, 0) / boltHoles.length;
         }
 
+        // Check if there is a dominant central bore (> 18% of OD) typical of motor/L-mounting brackets
+        const hasDominantBore = centerBore && (centerBore.dia >= estOD * 0.16);
+
+        // Check if outer boundary has an inverted notch at bottom typical of chassis brackets
+        const hasBottomNotch = outer.bbox.height > outer.bbox.width * 0.6 && (outer.points.length > 8);
+
         return {
             flangeOD: Math.round(estOD),
-            boreID: centerBore ? Math.round(centerBore.dia) : Math.round(estOD * 0.3),
+            boreID: centerBore ? Math.round(centerBore.dia) : Math.round(estOD * 0.32),
             boltPCD: Math.round(estPCD),
-            boltCount: Math.min(16, Math.max(3, estBoltCount)),
-            boltDiameter: Math.max(3, Math.round(estBoltDia))
+            boltCount: Math.min(16, Math.max(2, estBoltCount)),
+            boltDiameter: Math.max(3, Math.round(estBoltDia)),
+            isMotorBracket: Boolean(hasDominantBore),
+            isChassisBracket: Boolean(!hasDominantBore && hasBottomNotch),
+            detectedWidth: outerWidth,
+            detectedHeight: outerHeight,
+            centerBoreRatio: centerBore ? (centerBore.dia / estOD) : 0
         };
     },
 
