@@ -1385,13 +1385,16 @@ window.CadGenerator = {
     // Mode: Multi-Plate Sheet Metal Solid from Multi-Directional Geometric Scanner
     createMultiPlateCadSolid(scanResult, options = {}) {
         const {
-            thickness = (scanResult.thicknessAnalysis?.thicknessMm || 2.0),
+            thickness = (scanResult?.thicknessAnalysis?.thicknessMm || 2.0),
             bendRadius = 2.0,
-            isFlat = false
+            isFlat = false,
+            contours = [],
+            targetWidthMm = 120,
+            epsilon = 0.5
         } = options;
 
         const geoms = [];
-        const t = Math.max(0.8, thickness);
+        const t = Math.max(0.6, thickness);
         const rIn = Math.max(0.4, bendRadius);
         const rOut = rIn + t;
 
@@ -1412,91 +1415,185 @@ window.CadGenerator = {
             return geom;
         };
 
-        const bbox = scanResult.fused3DGeometry?.boundingBoxMm || { width: 120, height: 100, depth: 60 };
-        const W = bbox.width;
-        const H = bbox.height;
-        const D = bbox.depth;
+        const simplify = (pts, eps) => (typeof window !== 'undefined' && window.ImageProcessor && window.ImageProcessor.simplifyPointPreserving)
+            ? window.ImageProcessor.simplifyPointPreserving(pts, 13.5, Math.min(0.55, eps * 0.35))
+            : (typeof window !== 'undefined' && window.ImageProcessor && window.ImageProcessor.simplifyDouglasPeucker)
+                ? window.ImageProcessor.simplifyDouglasPeucker(pts, eps)
+                : pts;
 
-        // Holes
-        const holes = scanResult.detectedHoles || [];
-        const bore = holes.find(h => h.type === 'BORE_CLEARANCE');
-        const boreR = bore ? (bore.diameterMm / 2) : (W * 0.16);
+        let primaryShape = null;
+        let partW = targetWidthMm;
+        let partH = 100;
+        let partD = t;
 
-        // 1. Upright Vertical Center Web (XZ Plane)
-        const web = new THREE.Shape();
-        web.moveTo(0, rOut);
-        web.lineTo(W, rOut);
-        web.lineTo(W, H - 4);
-        web.absarc(W - 4, H - 4, 4, 0, Math.PI / 2, false);
-        web.lineTo(4, H);
-        web.absarc(4, H - 4, 4, Math.PI / 2, Math.PI, false);
-        web.closePath();
+        const outerContours = (contours || []).filter(c => !c.isHole);
+        const holes = (contours || []).filter(c => c.isHole);
 
-        // Add Center Bore Cutout
-        const boreCenterY = H * 0.52;
-        const borePath = new THREE.Path();
-        borePath.absarc(W / 2, boreCenterY, boreR, 0, Math.PI * 2, true);
-        web.holes.push(borePath);
+        if (outerContours.length > 0) {
+            // Sort by area descending to find the primary part contour of the current model
+            const primaryOuter = outerContours.slice().sort((a, b) => (b.area || 0) - (a.area || 0))[0];
+            const scale = targetWidthMm / Math.max(1, primaryOuter.bbox.width);
+            partW = primaryOuter.bbox.width * scale;
+            partH = primaryOuter.bbox.height * scale;
+            const offsetX = primaryOuter.bbox.minX + primaryOuter.bbox.width / 2;
+            const offsetY = primaryOuter.bbox.minY + primaryOuter.bbox.height / 2;
 
-        // Add Mounting Bolt Holes
-        const mHoles = holes.filter(h => h.type === 'MOUNTING_HOLE');
-        if (mHoles.length >= 2) {
-            mHoles.forEach(mh => {
-                const hp = new THREE.Path();
-                hp.absarc(Math.max(6, Math.min(W - 6, mh.centerMm.x)), Math.max(rOut + 6, Math.min(H - 6, H - mh.centerMm.y)), mh.diameterMm / 2, 0, Math.PI * 2, true);
-                web.holes.push(hp);
-            });
-        } else {
-            // Default 4 precision corner holes
-            [ [W * 0.15, H * 0.82], [W * 0.85, H * 0.82], [W * 0.15, H * 0.22], [W * 0.85, H * 0.22] ].forEach(([hx, hy]) => {
-                const hp = new THREE.Path();
-                hp.absarc(hx, hy, 3.25, 0, Math.PI * 2, true);
-                web.holes.push(hp);
-            });
+            const simplifiedOuter = simplify(primaryOuter.points, epsilon);
+            if (simplifiedOuter.length >= 3) {
+                let outerPoints2D = simplifiedOuter.map(pt => ({
+                    x: (pt.x - offsetX) * scale,
+                    y: -(pt.y - offsetY) * scale
+                }));
+
+                if (this.checkIsClockwise(outerPoints2D)) {
+                    outerPoints2D.reverse();
+                }
+
+                primaryShape = new THREE.Shape();
+                primaryShape.moveTo(outerPoints2D[0].x, outerPoints2D[0].y);
+                for (let i = 1; i < outerPoints2D.length; i++) {
+                    primaryShape.lineTo(outerPoints2D[i].x, outerPoints2D[i].y);
+                }
+                primaryShape.closePath();
+
+                // Add all holes inside this outer contour
+                const partHoles = holes.filter(h => {
+                    if (h.parent === primaryOuter) return true;
+                    return (
+                        h.bbox.minX >= primaryOuter.bbox.minX - 2 &&
+                        h.bbox.maxX <= primaryOuter.bbox.maxX + 2 &&
+                        h.bbox.minY >= primaryOuter.bbox.minY - 2 &&
+                        h.bbox.maxY <= primaryOuter.bbox.maxY + 2
+                    );
+                }).sort((a, b) => b.area - a.area).slice(0, 36);
+
+                partHoles.forEach(hole => {
+                    try {
+                        if (hole.isParametricCircle && hole.circleCenter && hole.circleRadius) {
+                            const hcx = (hole.circleCenter.x - offsetX) * scale;
+                            const hcy = -(hole.circleCenter.y - offsetY) * scale;
+                            const hr = hole.circleRadius * scale;
+                            const holePath = new THREE.Path();
+                            holePath.absarc(hcx, hcy, hr, 0, Math.PI * 2, true);
+                            primaryShape.holes.push(holePath);
+                            return;
+                        }
+
+                        const simplifiedHole = simplify(hole.points, Math.max(1.0, epsilon));
+                        if (simplifiedHole.length >= 3) {
+                            let holePoints2D = simplifiedHole.map(pt => ({
+                                x: (pt.x - offsetX) * scale,
+                                y: -(pt.y - offsetY) * scale
+                            }));
+
+                            if (!this.checkIsClockwise(holePoints2D)) {
+                                holePoints2D.reverse();
+                            }
+
+                            const holePath = new THREE.Path();
+                            holePath.moveTo(holePoints2D[0].x, holePoints2D[0].y);
+                            for (let i = 1; i < holePoints2D.length; i++) {
+                                holePath.lineTo(holePoints2D[i].x, holePoints2D[i].y);
+                            }
+                            holePath.closePath();
+                            primaryShape.holes.push(holePath);
+                        }
+                    } catch (errHole) {
+                        console.warn('Skipped hole in sheet metal plate:', errHole);
+                    }
+                });
+            }
         }
 
-        // Extrude upright web along -Z
-        geoms.push(makePlate(web, t, 0, 0, 0, -W / 2, 0, -t));
+        if (primaryShape) {
+            // Main sheet metal plate body with laser cut bevel and sheet gauge thickness
+            geoms.push(makePlate(primaryShape, t, 0, 0, 0, 0, 0, -t / 2));
 
-        if (!isFlat) {
-            // 2. Base Plate (Extending forward in +Z on XY ground)
-            const baseLen = Math.max(30, D * 0.55);
-            const base = new THREE.Shape();
-            base.moveTo(0, 0);
-            base.lineTo(W, 0);
-            base.lineTo(W, baseLen - 4);
-            base.absarc(W - 4, baseLen - 4, 4, 0, Math.PI / 2, false);
-            base.lineTo(4, baseLen);
-            base.absarc(4, baseLen - 4, 4, Math.PI / 2, Math.PI, false);
-            base.closePath();
+            // Check if Multi-Directional Scan detected secondary formed plates or step flanges
+            const structures = scanResult?.sheetMetalStructure || [];
+            const hasBasePlate = structures.some(s => s.type === 'BASE_PLATE');
+            const hasStepShelf = structures.some(s => s.type === 'STEP_SHELF');
+            const scanD = scanResult?.fused3DGeometry?.boundingBoxMm?.depth || (partW * 0.45);
+            partD = isFlat ? t : Math.max(t, scanD);
 
-            // Mounting holes on base flange
-            [ [W * 0.2, baseLen * 0.5], [W * 0.8, baseLen * 0.5] ].forEach(([bx, by]) => {
-                const bp = new THREE.Path();
-                bp.absarc(bx, by, 3.25, 0, Math.PI * 2, true);
-                base.holes.push(bp);
-            });
+            if (!isFlat && hasBasePlate) {
+                // Formed bottom flange with press-brake cylindrical bend
+                const baseLen = Math.max(20, Math.min(partW * 0.6, scanD));
+                const baseWidth = partW * 0.85;
+                const baseShape = new THREE.Shape();
+                baseShape.moveTo(-baseWidth / 2, 0);
+                baseShape.lineTo(baseWidth / 2, 0);
+                baseShape.lineTo(baseWidth / 2, baseLen);
+                baseShape.lineTo(-baseWidth / 2, baseLen);
+                baseShape.closePath();
 
-            // RotateX(-PI/2), translate
-            geoms.push(makePlate(base, t, -Math.PI / 2, 0, 0, -W / 2, 0, rOut));
+                geoms.push(makePlate(baseShape, t, -Math.PI / 2, 0, 0, 0, -partH / 2, rOut));
 
-            // 3. Curved Press-Brake Bend between Base and Upright
-            const bendGeom = this.makeCurvedBend(W, rIn, t, -Math.PI / 2, 0, 16);
-            bendGeom.rotateY(-Math.PI / 2);
-            bendGeom.translate(W / 2, rOut, 0);
-            geoms.push(bendGeom);
+                const bend = this.makeCurvedBend(baseWidth, rIn, t, -Math.PI / 2, 0, 16);
+                bend.rotateY(-Math.PI / 2);
+                bend.translate(baseWidth / 2, -partH / 2 + rOut, 0);
+                geoms.push(bend);
+            }
 
-            // 4. Stepped Channel Shelf / Top Tab if detected by multi-directional scan
-            if (scanResult.sideScan?.steppedLevels >= 2 || scanResult.sheetMetalStructure?.some(s => s.type === 'STEP_SHELF')) {
-                const stepLen = Math.max(25, D * 0.4);
-                const stepY = H * 0.5;
-                const shelf = new THREE.Shape();
-                shelf.moveTo(0, 0);
-                shelf.lineTo(W * 0.7, 0);
-                shelf.lineTo(W * 0.7, stepLen);
-                shelf.lineTo(0, stepLen);
-                shelf.closePath();
-                geoms.push(makePlate(shelf, t, Math.PI / 2, 0, 0, -W * 0.35, stepY, -t));
+            if (!isFlat && hasStepShelf) {
+                const shelfLen = Math.max(18, scanD * 0.4);
+                const shelfW = partW * 0.6;
+                const shelfShape = new THREE.Shape();
+                shelfShape.moveTo(-shelfW / 2, 0);
+                shelfShape.lineTo(shelfW / 2, 0);
+                shelfShape.lineTo(shelfW / 2, shelfLen);
+                shelfShape.lineTo(-shelfW / 2, shelfLen);
+                shelfShape.closePath();
+
+                geoms.push(makePlate(shelfShape, t, Math.PI / 2, 0, 0, 0, 0, -t));
+            }
+        } else {
+            // Fallback bounding box plate if no contours available
+            const bbox = scanResult?.fused3DGeometry?.boundingBoxMm || { width: 120, height: 100, depth: 60 };
+            const W = bbox.width;
+            const H = bbox.height;
+            const D = bbox.depth;
+            partW = W;
+            partH = H;
+            partD = isFlat ? t : D;
+
+            const holes = scanResult?.detectedHoles || [];
+            const bore = holes.find(h => h.type === 'BORE_CLEARANCE');
+            const boreR = bore ? (bore.diameterMm / 2) : (W * 0.16);
+
+            const web = new THREE.Shape();
+            web.moveTo(0, rOut);
+            web.lineTo(W, rOut);
+            web.lineTo(W, H - 4);
+            web.absarc(W - 4, H - 4, 4, 0, Math.PI / 2, false);
+            web.lineTo(4, H);
+            web.absarc(4, H - 4, 4, Math.PI / 2, Math.PI, false);
+            web.closePath();
+
+            const boreCenterY = H * 0.52;
+            const borePath = new THREE.Path();
+            borePath.absarc(W / 2, boreCenterY, boreR, 0, Math.PI * 2, true);
+            web.holes.push(borePath);
+
+            geoms.push(makePlate(web, t, 0, 0, 0, -W / 2, 0, -t));
+
+            if (!isFlat) {
+                const baseLen = Math.max(30, D * 0.55);
+                const base = new THREE.Shape();
+                base.moveTo(0, 0);
+                base.lineTo(W, 0);
+                base.lineTo(W, baseLen - 4);
+                base.absarc(W - 4, baseLen - 4, 4, 0, Math.PI / 2, false);
+                base.lineTo(4, baseLen);
+                base.absarc(4, baseLen - 4, 4, Math.PI / 2, Math.PI, false);
+                base.closePath();
+
+                geoms.push(makePlate(base, t, -Math.PI / 2, 0, 0, -W / 2, 0, rOut));
+
+                const bendGeom = this.makeCurvedBend(W, rIn, t, -Math.PI / 2, 0, 16);
+                bendGeom.rotateY(-Math.PI / 2);
+                bendGeom.translate(W / 2, rOut, 0);
+                geoms.push(bendGeom);
             }
         }
 
@@ -1506,15 +1603,15 @@ window.CadGenerator = {
         return {
             geometry: merged,
             dimensions: {
-                width: W,
-                height: H,
-                depth: D
+                width: Math.round(partW * 10) / 10,
+                height: Math.round(partH * 10) / 10,
+                depth: Math.round(partD * 10) / 10
             },
-            components: scanResult.sheetMetalStructure || [],
-            featureInventory: scanResult.featureInventory || null,
-            validation: scanResult.validation || null,
-            thicknessAnalysis: scanResult.thicknessAnalysis || null,
-            partName: isFlat ? 'MULTI-DIRECTIONAL SHEET METAL (FLAT PATTERN)' : 'MULTI-DIRECTIONAL SHEET METAL CAD SOLID'
+            components: scanResult?.sheetMetalStructure || [],
+            featureInventory: scanResult?.featureInventory || null,
+            validation: scanResult?.validation || null,
+            thicknessAnalysis: scanResult?.thicknessAnalysis || null,
+            partName: isFlat ? 'CURRENT MODEL (FLAT PATTERN)' : 'CURRENT MODEL (SHEET METAL SOLID)'
         };
     }
 };
