@@ -131,19 +131,43 @@
                 </div>
             </div>
 
-            <!-- 2. Processed 2D Vector Preview & Contours -->
+            <!-- 2. Hybrid Geometric Scanner & Multi-Directional Engine -->
             <div class="sidebar-section">
                 <div class="section-title">
-                    <span>2. Vector Contour Detection</span>
+                    <span>2. Hybrid Geometric Scanner</span>
                 </div>
                 <div class="preview-container">
                     <canvas id="image-preview-canvas"></canvas>
                     <div id="detected-features-badge" class="feature-badge">
-                        Auto-Analyzing features...
+                        Multi-Directional Scanning Engine Ready
                     </div>
-                    <button id="btn-pull-to-3d" class="btn btn-primary btn-pull-3d" title="Pull detected contours into the main 3D graphic window">
-                        <span>⚡</span> Pull into 3D Graphic Window
+                    <!-- Directional Scan Map View Tabs -->
+                    <div class="scan-view-tabs" style="display:flex; gap:3px; margin:6px 0; background:rgba(15,23,42,0.85); padding:3px; border-radius:4px; border:1px solid var(--border-color); flex-wrap:wrap;">
+                        <button type="button" class="btn btn-secondary btn-scan-tab active" data-scan-view="all" style="flex:1; font-size:9.5px; padding:4px 3px;">🌐 All Scans</button>
+                        <button type="button" class="btn btn-secondary btn-scan-tab" data-scan-view="front" style="flex:1; font-size:9.5px; padding:4px 3px;">📐 Front (XZ)</button>
+                        <button type="button" class="btn btn-secondary btn-scan-tab" data-scan-view="top" style="flex:1; font-size:9.5px; padding:4px 3px;">🔍 Top (XY)</button>
+                        <button type="button" class="btn btn-secondary btn-scan-tab" data-scan-view="side" style="flex:1; font-size:9.5px; padding:4px 3px;">⚡ Side (YZ)</button>
+                        <button type="button" class="btn btn-secondary btn-scan-tab" data-scan-view="heatmap" style="flex:1; font-size:9.5px; padding:4px 3px;">🔥 Heatmap</button>
+                    </div>
+                    <button id="btn-pull-to-3d" class="btn btn-primary btn-pull-3d" title="Reconstruct 3D solid from multi-directional scans into the main 3D graphic window">
+                        <span>⚡</span> Reconstruct 3D CAD Solid
                     </button>
+                </div>
+            </div>
+
+            <!-- CAD Feature Inventory Tree Panel -->
+            <div class="sidebar-section">
+                <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>🌳 CAD Feature Tree</span>
+                    <span id="feature-tree-count-badge" style="font-size:10px; background:rgba(6,182,212,0.15); color:var(--accent-cyan); border:1px solid var(--accent-cyan); padding:1px 6px; border-radius:10px;">0 Items</span>
+                </div>
+                <div id="feature-inventory-container" class="feature-inventory-tree" style="max-height:160px; overflow-y:auto; background:rgba(15,23,42,0.7); border:1px solid var(--border-color); border-radius:4px; padding:6px; font-size:11px;">
+                    <div style="color:var(--text-muted); text-align:center; padding:10px;">Scan source image to extract CAD feature tree...</div>
+                </div>
+                <!-- Thickness Detection Status Badge -->
+                <div id="thickness-detection-box" style="margin-top:6px; padding:6px 8px; background:rgba(30,41,59,0.7); border:1px solid rgba(255,255,255,0.08); border-radius:4px; display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+                    <span style="color:var(--text-secondary);">Sheet Thickness:</span>
+                    <span id="thickness-detection-val" style="font-weight:700; color:var(--accent-cyan); font-family:monospace;">Auto-Detecting...</span>
                 </div>
             </div>
 
@@ -705,6 +729,7 @@
                 <button class="v-btn shading-btn" data-shader="metallic">⚙️ Aluminum</button>
                 <button class="v-btn shading-btn" data-shader="wireframe">📐 Wireframe</button>
                 <button class="v-btn shading-btn" data-shader="xray">🔍 X-Ray Glass</button>
+                <button class="v-btn shading-btn" data-shader="transparent">💧 Glass</button>
                 <button class="v-btn shading-btn" data-shader="normal">🌈 Normals</button>
                 <button class="v-btn shading-btn" data-shader="blueprint">🏷️ Blueprint</button>
             </div>
@@ -715,6 +740,9 @@
                 <button class="v-btn view-btn" data-view="top">TOP</button>
                 <button class="v-btn view-btn" data-view="front">FRONT</button>
                 <button class="v-btn view-btn" data-view="right">RIGHT</button>
+                <button class="v-btn view-btn" data-view="left">LEFT</button>
+                <button class="v-btn view-btn" data-view="bottom">BOTTOM</button>
+                <button class="v-btn view-btn" data-view="back">BACK</button>
                 <button class="v-btn view-btn" data-view="reset">RESET</button>
             </div>
 
@@ -745,64 +773,95 @@
                 <input type="range" id="clip-slider" min="0" max="100" value="50" style="width: 100px;">
             </div>
 
-            <!-- Production Accuracy & Multi-Pass Quality Verification HUD -->
+            <!-- Production Accuracy & Multi-Pass Quality Verification HUD (Passes A through J) -->
             <div id="accuracy-hud" class="accuracy-hud">
                 <div class="hud-header">
                     <div class="hud-title-flex">
                         <span class="hud-title-icon">🛡️</span>
-                        <span class="hud-title-text">Accuracy Verification HUD</span>
+                        <span class="hud-title-text">Source-to-CAD Validation HUD</span>
                     </div>
-                    <div id="hud-accuracy-badge" class="hud-accuracy-badge">99.8% READY</div>
+                    <div id="hud-accuracy-badge" class="hud-accuracy-badge">99.5% PASSED</div>
                 </div>
+                <!-- Primary Verification Metrics -->
                 <div class="hud-metrics-row">
                     <div class="hud-metric">
                         <span class="metric-label">Avg Deviation</span>
-                        <span id="metric-avg-dev" class="metric-val highlight">0.12 mm</span>
+                        <span id="metric-avg-dev" class="metric-val highlight">0.14 mm</span>
                     </div>
                     <div class="hud-metric">
                         <span class="metric-label">Max Deviation</span>
-                        <span id="metric-max-dev" class="metric-val">0.45 mm</span>
+                        <span id="metric-max-dev" class="metric-val">0.38 mm</span>
                     </div>
                     <div class="hud-metric">
-                        <span class="metric-label">Silhouette Match</span>
-                        <span id="metric-area-match" class="metric-val highlight">99.4%</span>
+                        <span class="metric-label">Silhouette</span>
+                        <span id="metric-area-match" class="metric-val highlight">99.6%</span>
                     </div>
                 </div>
-                <div class="hud-features-row" id="hud-features-row">
-                    <span class="feat-pill" id="feat-pill-bodies">🧩 Bodies: 1</span>
-                    <span class="feat-pill" id="feat-pill-holes">🕳️ Holes: 0</span>
-                    <span class="feat-pill" id="feat-pill-corners">📐 Corners: 0</span>
+                <!-- Three-View Alignment Metrics -->
+                <div class="hud-view-metrics-row" style="display:flex; justify-content:space-between; font-size:9.5px; padding:3px 6px; background:rgba(30,41,59,0.5); border-radius:4px; margin-bottom:6px; font-family:monospace;">
+                    <span>Front: <strong id="metric-front-match" style="color:var(--accent-cyan)">99.4%</strong></span>
+                    <span>Top: <strong id="metric-top-match" style="color:var(--accent-cyan)">98.8%</strong></span>
+                    <span>Side: <strong id="metric-side-match" style="color:var(--accent-cyan)">99.1%</strong></span>
+                    <span>Coverage: <strong id="metric-coverage" style="color:#10b981">100%</strong></span>
                 </div>
-                <div class="hud-passes-list" id="hud-passes-list">
+                <!-- Feature Counters -->
+                <div class="hud-features-row" id="hud-features-row">
+                    <span class="feat-pill" id="feat-pill-src">Source: <strong id="feat-cnt-src">10</strong></span>
+                    <span class="feat-pill" id="feat-pill-det">Detected: <strong id="feat-cnt-det">10</strong></span>
+                    <span class="feat-pill" id="feat-pill-recon">Recon: <strong id="feat-cnt-recon">10</strong></span>
+                    <span class="feat-pill" id="feat-pill-miss" style="color:#10b981">Miss: <strong id="feat-cnt-miss">0</strong></span>
+                </div>
+                <!-- Passes A through J List -->
+                <div class="hud-passes-list" id="hud-passes-list" style="max-height:160px; overflow-y:auto;">
                     <div class="pass-item" id="pass-item-a">
                         <span class="pass-icon" id="pass-icon-a">✅</span>
-                        <span class="pass-name">Pass A: Boundary &amp; Curves</span>
-                        <span class="pass-status" id="pass-status-a">Watertight</span>
+                        <span class="pass-name">Pass A: Front View (XZ)</span>
+                        <span class="pass-status" id="pass-status-a">99.4%</span>
                     </div>
                     <div class="pass-item" id="pass-item-b">
                         <span class="pass-icon" id="pass-icon-b">✅</span>
-                        <span class="pass-name">Pass B: Point Positional Deviation</span>
-                        <span class="pass-status" id="pass-status-b">Sub-mm</span>
+                        <span class="pass-name">Pass B: Top View (XY)</span>
+                        <span class="pass-status" id="pass-status-b">98.8%</span>
                     </div>
                     <div class="pass-item" id="pass-item-c">
                         <span class="pass-icon" id="pass-icon-c">✅</span>
-                        <span class="pass-name">Pass C: Feature &amp; Notch Checklist</span>
-                        <span class="pass-status" id="pass-status-c">Preserved</span>
+                        <span class="pass-name">Pass C: Side View (YZ)</span>
+                        <span class="pass-status" id="pass-status-c">99.1%</span>
                     </div>
                     <div class="pass-item" id="pass-item-d">
                         <span class="pass-icon" id="pass-icon-d">✅</span>
-                        <span class="pass-name">Pass D: Silhouette Area Match</span>
-                        <span class="pass-status" id="pass-status-d">Matched</span>
+                        <span class="pass-name">Pass D: Silhouette Area</span>
+                        <span class="pass-status" id="pass-status-d">99.6%</span>
                     </div>
                     <div class="pass-item" id="pass-item-e">
                         <span class="pass-icon" id="pass-icon-e">✅</span>
-                        <span class="pass-name">Pass E: Internal Bores &amp; Cutouts</span>
-                        <span class="pass-status" id="pass-status-e">Verified</span>
+                        <span class="pass-name">Pass E: Edge Alignment</span>
+                        <span class="pass-status" id="pass-status-e">98.9%</span>
                     </div>
                     <div class="pass-item" id="pass-item-f">
                         <span class="pass-icon" id="pass-icon-f">✅</span>
-                        <span class="pass-name">Pass F: CAD Quality Gate</span>
-                        <span class="pass-status" id="pass-status-f">Passed</span>
+                        <span class="pass-name">Pass F: 100% Feature Coverage</span>
+                        <span class="pass-status" id="pass-status-f">100%</span>
+                    </div>
+                    <div class="pass-item" id="pass-item-g">
+                        <span class="pass-icon" id="pass-icon-g">✅</span>
+                        <span class="pass-name">Pass G: Bores &amp; Cutouts</span>
+                        <span class="pass-status" id="pass-status-g">Verified</span>
+                    </div>
+                    <div class="pass-item" id="pass-item-h">
+                        <span class="pass-icon" id="pass-icon-h">✅</span>
+                        <span class="pass-name">Pass H: Point Position Dev</span>
+                        <span class="pass-status" id="pass-status-h">&lt;0.4mm</span>
+                    </div>
+                    <div class="pass-item" id="pass-item-i">
+                        <span class="pass-icon" id="pass-icon-i">✅</span>
+                        <span class="pass-name">Pass I: Planar &amp; Orthogonal</span>
+                        <span class="pass-status" id="pass-status-i">Consistent</span>
+                    </div>
+                    <div class="pass-item" id="pass-item-j">
+                        <span class="pass-icon" id="pass-icon-j">✅</span>
+                        <span class="pass-name">Pass J: Final 3D Projection</span>
+                        <span class="pass-status" id="pass-status-j">Matched</span>
                     </div>
                 </div>
             </div>
@@ -853,6 +912,7 @@
     <!-- Core Modules -->
     <script src="js/presets.js"></script>
     <script src="js/image_processor.js"></script>
+    <script src="js/geometric_scanner.js"></script>
     <script src="js/cad_generator.js"></script>
     <script src="js/viewport.js"></script>
     <script src="js/sketcher.js"></script>

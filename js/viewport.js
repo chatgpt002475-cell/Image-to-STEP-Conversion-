@@ -294,6 +294,17 @@ window.CadViewport = class {
                     side: THREE.DoubleSide
                 });
 
+            case 'transparent':
+                return new THREE.MeshStandardMaterial({
+                    color: 0x93c5fd,
+                    roughness: 0.2,
+                    metalness: 0.1,
+                    transparent: true,
+                    opacity: 0.45,
+                    clippingPlanes,
+                    side: THREE.DoubleSide
+                });
+
             default:
                 return new THREE.MeshStandardMaterial({
                     color: 0xd0d8e2,
@@ -382,6 +393,15 @@ window.CadViewport = class {
                 break;
             case 'right':
                 this.camera.position.set(dist * 1.5, targetY, 0);
+                break;
+            case 'left':
+                this.camera.position.set(-dist * 1.5, targetY, 0);
+                break;
+            case 'bottom':
+                this.camera.position.set(0, targetY - dist * 1.5, 0.001);
+                break;
+            case 'back':
+                this.camera.position.set(0, targetY, -dist * 1.5);
                 break;
             case 'reset':
                 this.camera.position.set(dist * 0.75, targetY + dist * 0.75, dist * 0.75);
