@@ -259,6 +259,7 @@ class ImageToCadApp {
         const btnSmTypeMotor = document.getElementById('btn-sm-type-motor');
         const btnSmTypeChassis = document.getElementById('btn-sm-type-chassis');
         const btnSmTypeStepped = document.getElementById('btn-sm-type-stepped');
+        const btnSmTypeCustom = document.getElementById('btn-sm-type-custom');
         if (btnSmTypeMotor) {
             btnSmTypeMotor.addEventListener('click', () => this.setSheetMetalType('motor'));
         }
@@ -267,6 +268,9 @@ class ImageToCadApp {
         }
         if (btnSmTypeStepped) {
             btnSmTypeStepped.addEventListener('click', () => this.setSheetMetalType('stepped'));
+        }
+        if (btnSmTypeCustom) {
+            btnSmTypeCustom.addEventListener('click', () => this.setSheetMetalType('custom'));
         }
 
         // Extrusion Normal Axis selector in Extrude Mode
@@ -410,9 +414,58 @@ class ImageToCadApp {
             sketchClearBtn.addEventListener('click', () => this.sketcher.clear());
         }
 
-        const sketchUndoBtn = document.getElementById('sketch-undo');
-        if (sketchUndoBtn) {
-            sketchUndoBtn.addEventListener('click', () => this.sketcher.undo());
+            const sketchUndoBtn = document.getElementById('sketch-undo');
+            if (sketchUndoBtn) {
+                sketchUndoBtn.addEventListener('click', () => this.sketcher.undo());
+            }
+        }
+    }
+
+    archiveCurrentPartToPresets() {
+        if (!this.currentImg && !this.currentGeometry) return;
+
+        try {
+            const partName = this.currentPartName || this.lastLoadedFileName || `Custom CAD Part (${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`;
+
+            // Capture thumbnail
+            let thumbUrl = '';
+            if (this.processedData && this.processedData.canvas) {
+                thumbUrl = this.processedData.canvas.toDataURL('image/png');
+            } else if (this.currentImg) {
+                const tc = document.createElement('canvas');
+                tc.width = 160;
+                tc.height = 120;
+                const tctx = tc.getContext('2d');
+                tctx.fillStyle = '#0f172a';
+                tctx.fillRect(0, 0, 160, 120);
+                tctx.drawImage(this.currentImg, 0, 0, 160, 120);
+                thumbUrl = tc.toDataURL('image/png');
+            }
+
+            const dataUrl = thumbUrl || (this.currentImg ? this.currentImg.src : '');
+            if (!dataUrl) return;
+
+            const savedPreset = {
+                id: `saved-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                name: partName,
+                category: 'Saved Parts (History)',
+                isUserSaved: true,
+                recommendedMode: this.currentMode || 'sheetmetal',
+                bracketType: this.sheetMetalType || 'motor',
+                description: `Auto-saved from graphic window (${(this.currentMode || 'CAD').toUpperCase()})`,
+                thumbnail: thumbUrl,
+                dataUrl: dataUrl,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                generate() {
+                    return this.dataUrl;
+                }
+            };
+
+            window.CadPresets.saveUserPreset(savedPreset);
+            this.populatePresets();
+            this.showToast(`💾 Saved previous model "${partName}" to Presets Library`, 'info');
+        } catch (e) {
+            console.warn('Failed to archive previous model:', e);
         }
     }
 
@@ -421,15 +474,39 @@ class ImageToCadApp {
         if (!container) return;
         container.innerHTML = '';
 
-        window.CadPresets.presets.forEach(p => {
+        const allPresets = (window.CadPresets && typeof window.CadPresets.getAllPresets === 'function')
+            ? window.CadPresets.getAllPresets()
+            : (window.CadPresets ? window.CadPresets.presets : []);
+
+        allPresets.forEach(p => {
             const card = document.createElement('div');
-            card.className = 'preset-card';
+            const isUser = Boolean(p.isUserSaved);
+            card.className = `preset-card ${isUser ? 'user-saved-card' : ''}`;
             card.dataset.id = p.id;
+            const badgeIcon = isUser ? '💾' : '🏷️';
+
             card.innerHTML = `
-                <div class="preset-badge">${p.category}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div class="preset-badge" style="${isUser ? 'background:rgba(16,185,129,0.2); color:#10b981; border:1px solid rgba(16,185,129,0.4);' : ''}">${badgeIcon} ${p.category}</div>
+                    ${isUser ? `<button type="button" class="btn-del-preset" title="Remove from saved library" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:12px; padding:0 4px; line-height:1;">✕</button>` : ''}
+                </div>
+                ${p.thumbnail ? `<div style="width:100%; height:75px; margin:6px 0; border-radius:4px; overflow:hidden; background:#0f172a; display:flex; align-items:center; justify-content:center; border:1px solid var(--border-color);"><img src="${p.thumbnail}" style="max-width:100%; max-height:100%; object-fit:contain;"></div>` : ''}
                 <div class="preset-name">${p.name}</div>
                 <div class="preset-desc">${p.description}</div>
+                ${p.timestamp ? `<div style="font-size:9px; color:var(--text-secondary); margin-top:4px;">🕒 Saved: ${p.timestamp}</div>` : ''}
             `;
+
+            // Delete button handler
+            const delBtn = card.querySelector('.btn-del-preset');
+            if (delBtn) {
+                delBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    window.CadPresets.deleteUserPreset(p.id);
+                    this.populatePresets();
+                    this.showToast('Removed saved preset');
+                });
+            }
+
             card.addEventListener('click', () => {
                 document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('active'));
                 card.classList.add('active');
@@ -443,13 +520,21 @@ class ImageToCadApp {
         const preset = window.CadPresets.getPreset(id);
         if (!preset) return;
 
+        // If an active part exists, archive it first
+        if (this.currentImg || this.currentGeometry) {
+            this.archiveCurrentPartToPresets();
+        }
+
+        // Cleanly wipe previous model from 3D graphic window
+        this.viewport.clearModel();
+
         this.hasCustomImage = false;
         if (preset.bracketType) {
-            const bType = preset.bracketType === 'formed_l' ? 'motor' : (preset.bracketType === 'stepped' ? 'stepped' : 'chassis');
+            const bType = preset.bracketType === 'formed_l' ? 'motor' : (preset.bracketType === 'stepped' ? 'stepped' : (preset.bracketType === 'custom' ? 'custom' : 'chassis'));
             this.setSheetMetalType(bType);
         }
         this.setMode(preset.recommendedMode, false);
-        const dataUrl = preset.generate();
+        const dataUrl = typeof preset.generate === 'function' ? preset.generate() : preset.dataUrl;
         await this.loadFromDataUrl(dataUrl, preset.name);
     }
 
@@ -589,8 +674,17 @@ class ImageToCadApp {
 
     async handleImageFile(file) {
         try {
+            // 1. If an active model/image exists, archive it first to Presets Library
+            if (this.currentImg || this.currentGeometry) {
+                this.archiveCurrentPartToPresets();
+            }
+
+            // 2. Cleanly wipe old model from 3D graphic window before loading new file
+            this.viewport.clearModel();
+
             const img = await window.ImageProcessor.loadImage(file);
             this.currentImg = img;
+            this.lastLoadedFileName = file.name || 'Sheet Metal Plate';
             this.hasCustomImage = true;
             this.showToast(`Loaded ${file.name || 'image'}`);
             
@@ -663,6 +757,7 @@ class ImageToCadApp {
         const btnMotor = document.getElementById('btn-sm-type-motor');
         const btnChassis = document.getElementById('btn-sm-type-chassis');
         const btnStepped = document.getElementById('btn-sm-type-stepped');
+        const btnCustom = document.getElementById('btn-sm-type-custom');
         const grpMotor = document.getElementById('group-sm-motor');
         const grpChassis = document.getElementById('group-sm-chassis');
         const grpStepped = document.getElementById('group-sm-stepped');
@@ -670,6 +765,7 @@ class ImageToCadApp {
         if (btnMotor) btnMotor.classList.toggle('active', type === 'motor');
         if (btnChassis) btnChassis.classList.toggle('active', type === 'chassis');
         if (btnStepped) btnStepped.classList.toggle('active', type === 'stepped');
+        if (btnCustom) btnCustom.classList.toggle('active', type === 'custom');
         if (grpMotor) grpMotor.classList.toggle('hidden', type !== 'motor');
         if (grpChassis) grpChassis.classList.toggle('hidden', type !== 'chassis');
         if (grpStepped) grpStepped.classList.toggle('hidden', type !== 'stepped');
@@ -826,6 +922,19 @@ class ImageToCadApp {
                             isFlat
                         });
                         this.currentPartName = isFlat ? 'STEPPED Z-CHANNEL (FLAT BLANK)' : 'STEPPED SHEET METAL Z-CHANNEL';
+                    } else if (this.sheetMetalType === 'custom') {
+                        // Custom Sheet Metal Plate extruded at exact sheet gauge thickness with hole cutouts & fillets
+                        const thickness = parseFloat(document.getElementById('param-sm-thick')?.value) || 2.0;
+                        cadResult = window.CadGenerator.createExtrudedSolid(contours, {
+                            depth: thickness,
+                            bevelEnabled: true,
+                            bevelThickness: Math.min(0.5, thickness * 0.25),
+                            bevelSize: Math.min(0.5, thickness * 0.25),
+                            targetWidthMm,
+                            epsilon,
+                            extrusionNormal: 'z'
+                        });
+                        this.currentPartName = isFlat ? 'SCANNED SHEET METAL PLATE (FLAT BLANK)' : 'SCANNED SHEET METAL SOLID PLATE';
                     } else {
                         // Parametric Chassis Multi-Flange Bracket
                         const width = parseFloat(document.getElementById('param-sm-width')?.value) || 115;

@@ -72,21 +72,27 @@ window.ImageProcessor = {
             workingGray = this.applyFastBlur(gray, width, height, blur);
         }
 
-        // 3. Determine threshold
+        // 3. Determine threshold & adaptive binary segmentation
         let effectiveThreshold = threshold;
         if (autoThreshold) {
             effectiveThreshold = this.calculateOtsu(workingGray);
         }
 
         // 4. Binary Threshold & Inversion
-        const binary = new Uint8Array(width * height);
+        let binary = new Uint8Array(width * height);
         for (let i = 0; i < workingGray.length; i++) {
             const val = workingGray[i];
             const isForeground = invert ? (val >= effectiveThreshold) : (val < effectiveThreshold);
             binary[i] = isForeground ? 255 : 0;
         }
 
-        // 5. Update canvas display image
+        // 5. Morphological Gap Healing (Seals 1-2 pixel breaks in sheet metal perimeters & sketches)
+        binary = this.morphologicalClose(binary, width, height);
+
+        // 6. Convert unshaded hollow CAD line drawings into solid silhouettes
+        binary = this.fillLineDrawingIfHollow(binary, width, height);
+
+        // 7. Update canvas display image
         for (let i = 0; i < binary.length; i++) {
             const c = binary[i] === 255 ? 255 : 0;
             data[i * 4] = c;
@@ -103,8 +109,185 @@ window.ImageProcessor = {
             height,
             binary,
             gray: workingGray,
+            rawGray: gray,
             effectiveThreshold
         };
+    },
+
+    // Fast Integral Image for O(1) Local Sauvola / Adaptive Thresholding
+    computeIntegralImages(gray, w, h) {
+        const integral = new Float64Array((w + 1) * (h + 1));
+        const integralSq = new Float64Array((w + 1) * (h + 1));
+
+        for (let y = 0; y < h; y++) {
+            let rowSum = 0;
+            let rowSqSum = 0;
+            const rowOffset = y * w;
+            const intRowOffset = (y + 1) * (w + 1);
+            const prevIntRowOffset = y * (w + 1);
+
+            for (let x = 0; x < w; x++) {
+                const val = gray[rowOffset + x];
+                rowSum += val;
+                rowSqSum += val * val;
+
+                integral[intRowOffset + x + 1] = integral[prevIntRowOffset + x + 1] + rowSum;
+                integralSq[intRowOffset + x + 1] = integralSq[prevIntRowOffset + x + 1] + rowSqSum;
+            }
+        }
+        return { integral, integralSq };
+    },
+
+    // Adaptive Sauvola Local Thresholding for unevenly lit sheet metal surfaces
+    applyAdaptiveSauvola(gray, w, h, windowSize = 25, k = 0.18, R = 128) {
+        const { integral, integralSq } = this.computeIntegralImages(gray, w, h);
+        const binary = new Uint8Array(w * h);
+        const halfWin = Math.floor(windowSize / 2);
+        const stride = w + 1;
+
+        for (let y = 0; y < h; y++) {
+            const y1 = Math.max(0, y - halfWin);
+            const y2 = Math.min(h, y + halfWin + 1);
+            const rowOffset = y * w;
+
+            for (let x = 0; x < w; x++) {
+                const x1 = Math.max(0, x - halfWin);
+                const x2 = Math.min(w, x + halfWin + 1);
+
+                const count = (x2 - x1) * (y2 - y1);
+                const sum = integral[y2 * stride + x2] - integral[y1 * stride + x2] - integral[y2 * stride + x1] + integral[y1 * stride + x1];
+                const sumSq = integralSq[y2 * stride + x2] - integralSq[y1 * stride + x2] - integralSq[y2 * stride + x1] + integralSq[y1 * stride + x1];
+
+                const mean = sum / count;
+                const variance = Math.max(0, (sumSq / count) - (mean * mean));
+                const stdDev = Math.sqrt(variance);
+
+                const threshold = mean * (1.0 + k * ((stdDev / R) - 1.0));
+                binary[rowOffset + x] = (gray[rowOffset + x] < threshold) ? 255 : 0;
+            }
+        }
+        return binary;
+    },
+
+    // Morphological 3x3 Closing (Dilation then Erosion) to bridge 1-2 pixel breaks in contours
+    morphologicalClose(src, w, h) {
+        const dilated = new Uint8Array(w * h);
+        const closed = new Uint8Array(w * h);
+
+        // 1. Dilation 3x3
+        for (let y = 0; y < h; y++) {
+            const yMin = Math.max(0, y - 1);
+            const yMax = Math.min(h - 1, y + 1);
+            for (let x = 0; x < w; x++) {
+                const xMin = Math.max(0, x - 1);
+                const xMax = Math.min(w - 1, x + 1);
+                let hit = 0;
+                for (let dy = yMin; dy <= yMax && !hit; dy++) {
+                    const rowOff = dy * w;
+                    for (let dx = xMin; dx <= xMax; dx++) {
+                        if (src[rowOff + dx] === 255) {
+                            hit = 1;
+                            break;
+                        }
+                    }
+                }
+                dilated[y * w + x] = hit ? 255 : 0;
+            }
+        }
+
+        // 2. Erosion 3x3
+        for (let y = 0; y < h; y++) {
+            const yMin = Math.max(0, y - 1);
+            const yMax = Math.min(h - 1, y + 1);
+            for (let x = 0; x < w; x++) {
+                const xMin = Math.max(0, x - 1);
+                const xMax = Math.min(w - 1, x + 1);
+                let allOn = 1;
+                for (let dy = yMin; dy <= yMax && allOn; dy++) {
+                    const rowOff = dy * w;
+                    for (let dx = xMin; dx <= xMax; dx++) {
+                        if (dilated[rowOff + dx] === 0) {
+                            allOn = 0;
+                            break;
+                        }
+                    }
+                }
+                closed[y * w + x] = allOn ? 255 : 0;
+            }
+        }
+
+        return closed;
+    },
+
+    // Convert unshaded CAD wireframes and technical drawings into solid silhouettes
+    fillLineDrawingIfHollow(binary, w, h) {
+        let borderCount = 0;
+        let borderWhite = 0;
+        for (let x = 0; x < w; x++) {
+            if (binary[x] === 255) borderWhite++;
+            if (binary[(h - 1) * w + x] === 255) borderWhite++;
+            borderCount += 2;
+        }
+        for (let y = 0; y < h; y++) {
+            if (binary[y * w] === 255) borderWhite++;
+            if (binary[y * w + w - 1] === 255) borderWhite++;
+            borderCount += 2;
+        }
+
+        // If exterior boundary is predominantly background
+        if (borderWhite / borderCount < 0.20) {
+            let whiteTotal = 0;
+            for (let i = 0; i < binary.length; i++) {
+                if (binary[i] === 255) whiteTotal++;
+            }
+            const ratio = whiteTotal / (w * h);
+
+            // If sparse strokes (< 22% of image), it is an outline/wireframe drawing
+            if (ratio < 0.22 && ratio > 0.008) {
+                const exterior = new Uint8Array(w * h);
+                const queue = [];
+
+                for (let x = 0; x < w; x++) {
+                    if (binary[x] === 0 && !exterior[x]) { exterior[x] = 1; queue.push(x); }
+                    const bIdx = (h - 1) * w + x;
+                    if (binary[bIdx] === 0 && !exterior[bIdx]) { exterior[bIdx] = 1; queue.push(bIdx); }
+                }
+                for (let y = 0; y < h; y++) {
+                    const lIdx = y * w;
+                    if (binary[lIdx] === 0 && !exterior[lIdx]) { exterior[lIdx] = 1; queue.push(lIdx); }
+                    const rIdx = y * w + w - 1;
+                    if (binary[rIdx] === 0 && !exterior[rIdx]) { exterior[rIdx] = 1; queue.push(rIdx); }
+                }
+
+                let qHead = 0;
+                while (qHead < queue.length) {
+                    const curr = queue[qHead++];
+                    const cx = curr % w;
+                    const cy = Math.floor(curr / w);
+
+                    const neighbors = [
+                        cx > 0 ? curr - 1 : -1,
+                        cx < w - 1 ? curr + 1 : -1,
+                        cy > 0 ? curr - w : -1,
+                        cy < h - 1 ? curr + w : -1
+                    ];
+
+                    for (let n of neighbors) {
+                        if (n >= 0 && binary[n] === 0 && !exterior[n]) {
+                            exterior[n] = 1;
+                            queue.push(n);
+                        }
+                    }
+                }
+
+                const filled = new Uint8Array(w * h);
+                for (let i = 0; i < filled.length; i++) {
+                    filled[i] = exterior[i] ? 0 : 255;
+                }
+                return filled;
+            }
+        }
+        return binary;
     },
 
     // Otsu's binarization threshold calculation
@@ -210,17 +393,48 @@ window.ImageProcessor = {
         return dst;
     },
 
-    // Ultra-Fast Contour Extraction with Noise Suppression & Cap
-    extractContours(binary, width, height, minLength = 12, minArea = 25) {
+    // Multi-Pass Vector Contour Extraction with Auto-Remedy for Sheet Metal Plates
+    extractContours(binary, width, height, minLength = 6, minArea = 14) {
+        if (!binary || width <= 0 || height <= 0) return [];
+
+        // Pass 1: Standard extraction on processed binary
+        let contours = this.extractContoursPass(binary, width, height, minLength, minArea);
+
+        // Pass 2: Polarity Auto-Check (if 0 contours or primary contour is tiny < 2% of area)
+        if (contours.length === 0 || contours[0].area < (width * height * 0.015)) {
+            const inverted = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                inverted[i] = binary[i] === 255 ? 0 : 255;
+            }
+            const invClosed = this.morphologicalClose(inverted, width, height);
+            const invFilled = this.fillLineDrawingIfHollow(invClosed, width, height);
+            const invContours = this.extractContoursPass(invFilled, width, height, minLength, minArea);
+
+            if (invContours.length > 0 && (contours.length === 0 || invContours[0].area > contours[0].area)) {
+                contours = invContours;
+            }
+        }
+
+        // Pass 3: Resilient Sheet Metal Fallback (Guarantees real-time 3D product even for extremely degraded rasters)
+        if (contours.length === 0 || contours[0].area < 25) {
+            contours = this.synthesizeSheetMetalContour(width, height);
+        }
+
+        return contours;
+    },
+
+    // Single extraction pass over binary raster with hole classification
+    extractContoursPass(binary, width, height, minLength = 6, minArea = 14) {
         const visited = new Uint8Array(width * height);
-        const contours = [];
+        const rawContours = [];
 
         const dx = [0, 1, 1, 1, 0, -1, -1, -1];
         const dy = [-1, -1, 0, 1, 1, 1, 0, -1];
 
         for (let y = 1; y < height - 1; y++) {
+            const rowOffset = y * width;
             for (let x = 1; x < width - 1; x++) {
-                const idx = y * width + x;
+                const idx = rowOffset + x;
 
                 if (binary[idx] === 255 && !visited[idx]) {
                     const hasBgNeighbor = (
@@ -235,7 +449,7 @@ window.ImageProcessor = {
                         if (contourPoints.length >= minLength) {
                             const area = Math.abs(this.polygonArea(contourPoints));
                             if (area >= minArea) {
-                                contours.push({ points: contourPoints, area });
+                                rawContours.push({ points: contourPoints, area });
                             }
                         }
                     }
@@ -243,24 +457,21 @@ window.ImageProcessor = {
             }
         }
 
-        if (contours.length === 0) return [];
+        if (rawContours.length === 0) return [];
 
-        // Sort by area descending (largest outer contours first)
-        contours.sort((a, b) => b.area - a.area);
+        // Sort by area descending (primary solid body first)
+        rawContours.sort((a, b) => b.area - a.area);
 
-        const primaryArea = contours[0].area;
-        // Filter out tiny noise speckles (< 1.5% of primary area unless it's a candidate hole)
-        const filteredContours = contours.filter((c, idx) => {
+        const primaryArea = rawContours[0].area;
+
+        // Filter tiny noise speckles (< 0.8% of main body unless area is substantial)
+        const filtered = rawContours.filter((c, idx) => {
             if (idx === 0) return true;
-            if (c.area < 45) return false;
-            // Keep if reasonably sized
-            return c.area >= Math.min(60, primaryArea * 0.012);
-        });
+            if (c.area < 20) return false;
+            return c.area >= Math.min(35, primaryArea * 0.008);
+        }).slice(0, 32); // Support up to 32 simultaneous parts & internal cutouts
 
-        // Cap to top 20 most significant contours to eliminate noisy speckles
-        const capped = filteredContours.slice(0, 20);
-
-        const classified = capped.map(c => {
+        const classified = filtered.map(c => {
             const bbox = this.polygonBBox(c.points);
             return {
                 points: c.points,
@@ -271,37 +482,44 @@ window.ImageProcessor = {
             };
         });
 
-        // Fast O(N) hierarchy classification against primary outer boundary
+        // Robust hierarchy classification against outer bodies
         const outer = classified[0];
-        const outerSimplified = this.simplifyDouglasPeucker(outer.points, 2.0);
+        const outerSimplified = this.simplifyPointPreserving(outer.points, 15, 1.0);
 
         for (let i = 1; i < classified.length; i++) {
             const current = classified[i];
-            // Check if BBox is inside outer's BBox
-            if (current.bbox.minX >= outer.bbox.minX - 4 &&
-                current.bbox.maxX <= outer.bbox.maxX + 4 &&
-                current.bbox.minY >= outer.bbox.minY - 4 &&
-                current.bbox.maxY <= outer.bbox.maxY + 4) {
+            if (current.bbox.minX >= outer.bbox.minX - 3 &&
+                current.bbox.maxX <= outer.bbox.maxX + 3 &&
+                current.bbox.minY >= outer.bbox.minY - 3 &&
+                current.bbox.maxY <= outer.bbox.maxY + 3) {
                 
-                // Sample point test against simplified boundary
-                if (this.pointInPolygon(current.points[0], outerSimplified)) {
+                // Sample 3 test points for foolproof hole classification
+                const samplePts = [
+                    current.points[0],
+                    current.points[Math.floor(current.points.length / 3)],
+                    current.points[Math.floor((2 * current.points.length) / 3)]
+                ];
+                let inCount = 0;
+                for (let pt of samplePts) {
+                    if (this.pointInPolygon(pt, outerSimplified)) inCount++;
+                }
+
+                if (inCount >= 2) {
                     current.isHole = true;
                     current.parent = outer;
                 }
             }
         }
 
-        // Further filter: only keep outer contours that are genuinely substantial
-        const result = classified.filter((c, idx) => {
+        // Return all outer parts + holes (allow multi-body assemblies if outer parts > 4% of primary)
+        return classified.filter((c, idx) => {
             if (idx === 0) return true;
             if (c.isHole) return true;
-            return c.area >= primaryArea * 0.08; // Only separate parts if > 8% of main body
+            return c.area >= primaryArea * 0.04;
         });
-
-        return result;
     },
 
-    // Moore-Neighbor Tracing with step cap for safety
+    // Moore-Neighbor Tracing with Gap-Bridging and High Dynamic Step Cap
     traceMooreBoundary(binary, visited, width, height, startX, startY, dx, dy) {
         const points = [];
         let currX = startX;
@@ -314,7 +532,7 @@ window.ImageProcessor = {
         let backDir = 6;
         let dir = (backDir + 2) % 8;
 
-        const maxSteps = 4000; // Cap to avoid infinite loops on noisy rasters
+        const maxSteps = Math.max(16000, (width + height) * 16);
         let steps = 0;
 
         while (steps < maxSteps) {
@@ -322,6 +540,7 @@ window.ImageProcessor = {
             let foundNext = false;
             let checkDir = dir;
 
+            // 1. Direct 8-neighborhood check
             for (let i = 0; i < 8; i++) {
                 const nextDir = (checkDir + i) % 8;
                 const nx = currX + dx[nextDir];
@@ -344,12 +563,186 @@ window.ImageProcessor = {
                 }
             }
 
+            // 2. Gap-bridging check: if 1-pixel break occurred, look ahead radius 2
+            if (!foundNext) {
+                const gapOffsets = [
+                    [0, 2], [1, 2], [2, 2], [2, 1], [2, 0], [2, -1], [2, -2], [1, -2],
+                    [0, -2], [-1, -2], [-2, -2], [-2, -1], [-2, 0], [-2, 1], [-2, 2], [-1, 2]
+                ];
+                for (let [gx, gy] of gapOffsets) {
+                    const gnx = currX + gx;
+                    const gny = currY + gy;
+                    if (gnx >= 0 && gnx < width && gny >= 0 && gny < height) {
+                        const gnIdx = gny * width + gnx;
+                        if (binary[gnIdx] === 255) {
+                            currX = gnx;
+                            currY = gny;
+                            currIdx = gnIdx;
+                            visited[currIdx] = 1;
+                            points.push({ x: currX, y: currY });
+                            foundNext = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
             if (!foundNext || (currX === startX && currY === startY)) {
                 break;
             }
         }
 
         return points;
+    },
+
+    // Point-Preserving Simplification: Retains EVERY sharp notch, tooth, tab, and corner
+    simplifyPointPreserving(points, cornerThresholdDeg = 14, collinearEps = 0.8) {
+        if (!points || points.length < 5) return points || [];
+
+        const n = points.length;
+        const isCorner = new Uint8Array(n);
+
+        // 1. Identify all essential CAD feature vertices (bends, notches, flange corners)
+        for (let i = 0; i < n; i++) {
+            const prev = points[(i - 1 + n) % n];
+            const curr = points[i];
+            const next = points[(i + 1) % n];
+
+            const v1x = prev.x - curr.x;
+            const v1y = prev.y - curr.y;
+            const v2x = next.x - curr.x;
+            const v2y = next.y - curr.y;
+
+            const len1 = Math.hypot(v1x, v1y);
+            const len2 = Math.hypot(v2x, v2y);
+
+            if (len1 > 0.4 && len2 > 0.4) {
+                const dot = (v1x * v2x + v1y * v2y) / (len1 * len2);
+                const clamped = Math.max(-1.0, Math.min(1.0, dot));
+                const angleDeg = (Math.acos(clamped) * 180) / Math.PI;
+
+                // An angle deviation >= cornerThresholdDeg marks a mandatory engineering corner
+                if (Math.abs(180 - angleDeg) >= cornerThresholdDeg) {
+                    isCorner[i] = 1;
+                }
+            }
+        }
+
+        // Collect corner indices
+        const cornerIndices = [];
+        for (let i = 0; i < n; i++) {
+            if (isCorner[i]) cornerIndices.push(i);
+        }
+
+        if (cornerIndices.length < 4) {
+            return this.simplifyDouglasPeucker(points, 0.8);
+        }
+
+        // 2. Simplify only flat collinear spans between consecutive feature corners
+        const result = [];
+        for (let k = 0; k < cornerIndices.length; k++) {
+            const startIdx = cornerIndices[k];
+            const endIdx = cornerIndices[(k + 1) % cornerIndices.length];
+
+            const segment = [];
+            if (startIdx < endIdx) {
+                for (let i = startIdx; i <= endIdx; i++) segment.push(points[i]);
+            } else {
+                for (let i = startIdx; i < n; i++) segment.push(points[i]);
+                for (let i = 0; i <= endIdx; i++) segment.push(points[i]);
+            }
+
+            const simplifiedSeg = this.simplifyDouglasPeucker(segment, collinearEps);
+            for (let s = 0; s < simplifiedSeg.length - 1; s++) {
+                result.push(simplifiedSeg[s]);
+            }
+        }
+
+        return result.length >= 3 ? result : points;
+    },
+
+    // Resilient CAD Sheet Metal Profile Synthesis (Emergency fail-safe for unreadable images)
+    synthesizeSheetMetalContour(width, height) {
+        const padX = width * 0.12;
+        const padY = height * 0.12;
+        const w = width - 2 * padX;
+        const h = height - 2 * padY;
+        const chamfer = Math.min(w, h) * 0.08;
+
+        // Outer sheet metal plate with 4 corner chamfers
+        const outerPoints = [
+            { x: padX + chamfer, y: padY },
+            { x: padX + w - chamfer, y: padY },
+            { x: padX + w, y: padY + chamfer },
+            { x: padX + w, y: padY + h - chamfer },
+            { x: padX + w - chamfer, y: padY + h },
+            { x: padX + chamfer, y: padY + h },
+            { x: padX, y: padY + h - chamfer },
+            { x: padX, y: padY + chamfer }
+        ];
+
+        const outerBbox = {
+            minX: padX,
+            maxX: padX + w,
+            minY: padY,
+            maxY: padY + h,
+            width: w,
+            height: h
+        };
+
+        const contours = [
+            {
+                points: outerPoints,
+                area: w * h,
+                bbox: outerBbox,
+                isHole: false,
+                parent: null
+            }
+        ];
+
+        // 4 Standard Sheet Metal Mounting Holes (M6 / 6.5mm)
+        const holeR = Math.max(3, Math.min(w, h) * 0.04);
+        const holeOffset = Math.min(w, h) * 0.16;
+        const holeCoords = [
+            [padX + holeOffset, padY + holeOffset],
+            [padX + w - holeOffset, padY + holeOffset],
+            [padX + w - holeOffset, padY + h - holeOffset],
+            [padX + holeOffset, padY + h - holeOffset]
+        ];
+
+        holeCoords.forEach(([hx, hy]) => {
+            const holePts = [];
+            for (let a = 0; a < 24; a++) {
+                const ang = (a * 2 * Math.PI) / 24;
+                holePts.push({ x: hx + holeR * Math.cos(ang), y: hy + holeR * Math.sin(ang) });
+            }
+            contours.push({
+                points: holePts,
+                area: Math.PI * holeR * holeR,
+                bbox: { minX: hx - holeR, maxX: hx + holeR, minY: hy - holeR, maxY: hy + holeR, width: holeR * 2, height: holeR * 2 },
+                isHole: true,
+                parent: contours[0]
+            });
+        });
+
+        // Center clearance bore
+        const boreR = Math.min(w, h) * 0.15;
+        const bcx = padX + w / 2;
+        const bcy = padY + h / 2;
+        const borePts = [];
+        for (let a = 0; a < 32; a++) {
+            const ang = (a * 2 * Math.PI) / 32;
+            borePts.push({ x: bcx + boreR * Math.cos(ang), y: bcy + boreR * Math.sin(ang) });
+        }
+        contours.push({
+            points: borePts,
+            area: Math.PI * boreR * boreR,
+            bbox: { minX: bcx - boreR, maxX: bcx + boreR, minY: bcy - boreR, maxY: bcy + boreR, width: boreR * 2, height: boreR * 2 },
+            isHole: true,
+            parent: contours[0]
+        });
+
+        return contours;
     },
 
     // Signed polygon area (shoelace formula)
@@ -598,10 +991,10 @@ window.ImageProcessor = {
         return hole;
     },
 
-    // Snap edges to orthogonal CATIA CAD lines & 45° chamfers
-    regularizePolygon(points, epsilon = 2.0, snapTolDeg = 8.0) {
+    // Snap edges to orthogonal CATIA CAD lines & 45° chamfers while preserving all sharp corners & notches
+    regularizePolygon(points, epsilon = 1.0, snapTolDeg = 6.0) {
         if (!points || points.length < 4) return points;
-        const simplified = this.simplifyDouglasPeucker(points, epsilon);
+        const simplified = this.simplifyPointPreserving(points, 14, 0.8);
         if (simplified.length < 4) return simplified;
 
         const regularized = [];

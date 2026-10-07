@@ -501,7 +501,104 @@ window.CadPresets = {
         ctx.closePath();
     },
 
+    userPresets: [],
+
+    initUserPresets() {
+        try {
+            if (typeof localStorage === 'undefined') return;
+            const stored = localStorage.getItem('cad_user_presets');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (Array.isArray(parsed)) {
+                    this.userPresets = parsed.map(item => ({
+                        ...item,
+                        generate() {
+                            return item.dataUrl;
+                        }
+                    }));
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to load user presets from localStorage:', e);
+            this.userPresets = [];
+        }
+    },
+
+    saveUserPreset(preset) {
+        if (!this.userPresets) this.userPresets = [];
+        const item = {
+            ...preset,
+            generate() {
+                return preset.dataUrl;
+            }
+        };
+        // Avoid duplicate by ID
+        this.userPresets = this.userPresets.filter(p => p.id !== preset.id);
+        this.userPresets.unshift(item);
+        if (this.userPresets.length > 25) this.userPresets.pop();
+
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('cad_user_presets', JSON.stringify(this.userPresets.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    category: p.category || 'Saved Parts (History)',
+                    isUserSaved: true,
+                    recommendedMode: p.recommendedMode,
+                    bracketType: p.bracketType,
+                    description: p.description,
+                    dataUrl: p.dataUrl,
+                    thumbnail: p.thumbnail,
+                    timestamp: p.timestamp
+                }))));
+            }
+        } catch (e) {
+            console.warn('LocalStorage save failed:', e);
+        }
+        return item;
+    },
+
+    deleteUserPreset(id) {
+        if (!this.userPresets) return;
+        this.userPresets = this.userPresets.filter(p => p.id !== id);
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('cad_user_presets', JSON.stringify(this.userPresets.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    category: p.category || 'Saved Parts (History)',
+                    isUserSaved: true,
+                    recommendedMode: p.recommendedMode,
+                    bracketType: p.bracketType,
+                    description: p.description,
+                    dataUrl: p.dataUrl,
+                    thumbnail: p.thumbnail,
+                    timestamp: p.timestamp
+                }))));
+            }
+        } catch (e) {
+            console.warn('LocalStorage delete failed:', e);
+        }
+    },
+
     getPreset(id) {
+        if (this.userPresets) {
+            const foundUser = this.userPresets.find(p => p.id === id);
+            if (foundUser) return foundUser;
+        }
         return this.presets.find(p => p.id === id);
+    },
+
+    getAllPresets() {
+        if (!this.userPresets || this.userPresets.length === 0) {
+            this.initUserPresets();
+        }
+        return [...(this.userPresets || []), ...this.presets];
     }
 };
+
+// Initialize user presets on script evaluation
+if (typeof window !== 'undefined' && window.CadPresets) {
+    window.CadPresets.initUserPresets();
+}
+

@@ -128,6 +128,44 @@ window.CadViewport = class {
         this.renderer.setSize(width, height);
     }
 
+    // Remove active 3D model and sketch plane from graphic window
+    clearModel() {
+        if (this.currentMesh) {
+            this.scene.remove(this.currentMesh);
+            if (this.currentMesh.geometry) this.currentMesh.geometry.dispose();
+            this.currentMesh = null;
+        }
+        if (this.currentEdges) {
+            this.scene.remove(this.currentEdges);
+            if (this.currentEdges.geometry) this.currentEdges.geometry.dispose();
+            this.currentEdges = null;
+        }
+        this.currentGeometry = null;
+
+        // Clear XY sketch plane
+        if (this.imageXYGroup) {
+            while (this.imageXYGroup.children.length > 0) {
+                const child = this.imageXYGroup.children[0];
+                this.imageXYGroup.remove(child);
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (child.material.map) child.material.map.dispose();
+                    child.material.dispose();
+                }
+            }
+        }
+
+        // Clear projections
+        if (this.projectionGroup) {
+            while (this.projectionGroup.children.length > 0) {
+                const child = this.projectionGroup.children[0];
+                this.projectionGroup.remove(child);
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            }
+        }
+    }
+
     // Load or update 3D CAD model
     setModel(geometry) {
         this.currentGeometry = geometry;
