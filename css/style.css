@@ -717,6 +717,156 @@ input:checked + .slider:before {
     font-size: 11px;
 }
 
+/* Production Accuracy & Multi-Pass Quality Verification HUD */
+.accuracy-hud {
+    position: absolute;
+    top: 60px;
+    right: 16px;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    z-index: 10;
+    width: 290px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 15px rgba(6, 182, 212, 0.15);
+    transition: all 0.2s ease;
+}
+
+.accuracy-hud .hud-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 6px;
+}
+
+.accuracy-hud .hud-title-flex {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.accuracy-hud .hud-title-icon {
+    font-size: 13px;
+}
+
+.accuracy-hud .hud-title-text {
+    font-size: 10px;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    color: var(--text-primary);
+}
+
+.accuracy-hud .hud-accuracy-badge {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 12px;
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.5);
+    letter-spacing: 0.4px;
+}
+
+.accuracy-hud .hud-accuracy-badge.warning {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.5);
+}
+
+.accuracy-hud .hud-metrics-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    background: rgba(30, 41, 59, 0.6);
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.accuracy-hud .hud-metric {
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+}
+
+.accuracy-hud .metric-label {
+    font-size: 8.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.3px;
+}
+
+.accuracy-hud .metric-val {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: monospace;
+    color: var(--text-primary);
+}
+
+.accuracy-hud .metric-val.highlight {
+    color: var(--accent-cyan);
+}
+
+.accuracy-hud .hud-features-row {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    justify-content: space-between;
+}
+
+.accuracy-hud .feat-pill {
+    font-size: 9.5px;
+    font-weight: 600;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid var(--border-color);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+}
+
+.accuracy-hud .hud-passes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.accuracy-hud .pass-item {
+    display: flex;
+    align-items: center;
+    font-size: 10px;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.accuracy-hud .pass-icon {
+    font-size: 10px;
+}
+
+.accuracy-hud .pass-name {
+    flex: 1;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.accuracy-hud .pass-status {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--accent-green);
+    font-family: monospace;
+}
+
+.accuracy-hud .pass-status.fail {
+    color: var(--accent-rose);
+}
+
 /* CAD Telemetry HUD Card */
 .telemetry-hud {
     position: absolute;

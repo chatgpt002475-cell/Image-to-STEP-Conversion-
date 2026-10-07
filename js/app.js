@@ -414,10 +414,9 @@ class ImageToCadApp {
             sketchClearBtn.addEventListener('click', () => this.sketcher.clear());
         }
 
-            const sketchUndoBtn = document.getElementById('sketch-undo');
-            if (sketchUndoBtn) {
-                sketchUndoBtn.addEventListener('click', () => this.sketcher.undo());
-            }
+        const sketchUndoBtn = document.getElementById('sketch-undo');
+        if (sketchUndoBtn) {
+            sketchUndoBtn.addEventListener('click', () => this.sketcher.undo());
         }
     }
 
@@ -846,6 +845,18 @@ class ImageToCadApp {
                 const contours = window.ImageProcessor.extractContours(processed.binary, processed.width, processed.height);
                 this.currentContours = contours;
 
+                // Multi-Pass Production Validation (Passes A through F)
+                const scaleMmPerPx = targetWidthMm / processed.width;
+                const validation = window.ImageProcessor.runMultiPassValidation(
+                    processed.binary,
+                    contours,
+                    processed.width,
+                    processed.height,
+                    scaleMmPerPx
+                );
+                this.lastValidation = validation;
+                this.updateValidationHUD(validation);
+
                 // 3. Feature detection for mechanical parameters
                 const features = window.ImageProcessor.detectMechanicalFeatures(contours, processed.width, processed.height);
                 this.updateDetectedFeaturesUI(features);
@@ -1055,6 +1066,11 @@ class ImageToCadApp {
                 if (this.currentViewMode === '2d') {
                     this.render2dDrawing();
                 }
+
+                // Save validated model into Presets Library (Replaces previous version cleanly)
+                if (validation && validation.passed) {
+                    this.saveValidatedModelToPresets(validation);
+                }
             }
         } catch (err) {
             console.error('CAD Generation Error:', err);
@@ -1073,11 +1089,11 @@ class ImageToCadApp {
         const ctx = previewCanvas.getContext('2d');
         ctx.drawImage(processed.canvas, 0, 0);
 
-        // Overlay extracted vector contours
+        // Overlay extracted vector contours with feature color coding
         if (this.currentContours && this.currentContours.length > 0) {
             this.currentContours.forEach(c => {
                 if (c.points.length < 2) return;
-                ctx.strokeStyle = c.isHole ? '#00e5ff' : '#ff3366';
+                ctx.strokeStyle = c.isHole ? '#00e5ff' : '#10b981';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
                 ctx.moveTo(c.points[0].x, c.points[0].y);
@@ -1086,6 +1102,17 @@ class ImageToCadApp {
                 }
                 ctx.closePath();
                 ctx.stroke();
+
+                // Highlight critical CAD vertices and sharp corners in orange
+                if (c.criticalPoints && c.criticalPoints.length > 0) {
+                    ctx.fillStyle = '#f59e0b';
+                    c.criticalPoints.forEach(cp => {
+                        const pt = cp.point || cp;
+                        ctx.beginPath();
+                        ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                }
             });
         }
     }
@@ -1128,6 +1155,103 @@ class ImageToCadApp {
         if (boltDiaInput && !boltDiaInput.dataset.dirty) {
             boltDiaInput.value = features.boltDiameter;
             document.getElementById('param-flange-bolt-dia-val').textContent = features.boltDiameter;
+        }
+    }
+
+    updateValidationHUD(validation) {
+        if (!validation) return;
+
+        const badge = document.getElementById('hud-accuracy-badge');
+        if (badge) {
+            badge.textContent = `${validation.accuracyScore}% ${validation.passed ? 'READY' : 'REVIEW'}`;
+            badge.classList.toggle('warning', !validation.passed);
+        }
+
+        const avgDev = document.getElementById('metric-avg-dev');
+        if (avgDev) avgDev.textContent = `${validation.avgDeviationMm} mm`;
+
+        const maxDev = document.getElementById('metric-max-dev');
+        if (maxDev) maxDev.textContent = `${validation.maxDeviationMm} mm`;
+
+        const areaMatch = document.getElementById('metric-area-match');
+        if (areaMatch) areaMatch.textContent = `${validation.areaMatchPercent}%`;
+
+        // Update features pill
+        const bPill = document.getElementById('feat-pill-bodies');
+        if (bPill) bPill.textContent = `🧩 Bodies: ${validation.features?.outerBodies ?? 1}`;
+        const hPill = document.getElementById('feat-pill-holes');
+        if (hPill) hPill.textContent = `🕳️ Holes: ${validation.features?.holes ?? 0}`;
+        const cPill = document.getElementById('feat-pill-corners');
+        if (cPill) cPill.textContent = `📐 Corners: ${validation.features?.criticalVertices ?? 0}`;
+
+        // Update Passes A through F
+        const checks = validation.checks;
+        if (checks) {
+            const passKeys = ['passA', 'passB', 'passC', 'passD', 'passE', 'passF'];
+            const idLetters = ['a', 'b', 'c', 'd', 'e', 'f'];
+
+            passKeys.forEach((key, idx) => {
+                const letter = idLetters[idx];
+                const item = checks[key];
+                if (!item) return;
+
+                const iconEl = document.getElementById(`pass-icon-${letter}`);
+                const statusEl = document.getElementById(`pass-status-${letter}`);
+                if (iconEl) iconEl.textContent = item.status ? '✅' : '⚠️';
+                if (statusEl) {
+                    statusEl.textContent = item.status ? 'Passed' : 'Review';
+                    statusEl.classList.toggle('fail', !item.status);
+                    statusEl.title = item.detail || '';
+                }
+            });
+        }
+    }
+
+    saveValidatedModelToPresets(validation) {
+        if (!this.currentImg && !this.currentGeometry) return;
+
+        try {
+            const partName = this.currentPartName || this.lastLoadedFileName || `Validated CAD Part`;
+
+            let thumbUrl = '';
+            if (this.processedData && this.processedData.canvas) {
+                thumbUrl = this.processedData.canvas.toDataURL('image/png');
+            } else if (this.currentImg) {
+                const tc = document.createElement('canvas');
+                tc.width = 160;
+                tc.height = 120;
+                const tctx = tc.getContext('2d');
+                tctx.fillStyle = '#0f172a';
+                tctx.fillRect(0, 0, 160, 120);
+                tctx.drawImage(this.currentImg, 0, 0, 160, 120);
+                thumbUrl = tc.toDataURL('image/png');
+            }
+
+            const dataUrl = thumbUrl || (this.currentImg ? this.currentImg.src : '');
+            if (!dataUrl) return;
+
+            const validatedPreset = {
+                id: `preset-val-${Date.now()}`,
+                name: partName,
+                category: 'Validated Models (Production)',
+                isUserSaved: true,
+                isAuthoritative: true,
+                accuracyScore: validation.accuracyScore,
+                recommendedMode: this.currentMode || 'sheetmetal',
+                bracketType: this.sheetMetalType || 'motor',
+                description: `Validated CAD Model (${validation.accuracyScore}% Accuracy, Avg Dev: ${validation.avgDeviationMm}mm)`,
+                thumbnail: thumbUrl,
+                dataUrl: dataUrl,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            if (window.CadPresets && typeof window.CadPresets.replaceOrSaveValidatedPreset === 'function') {
+                window.CadPresets.replaceOrSaveValidatedPreset(validatedPreset, this.currentActivePresetId);
+                this.currentActivePresetId = validatedPreset.id;
+                this.populatePresets();
+            }
+        } catch (e) {
+            console.warn('Could not auto-save validated model to presets:', e);
         }
     }
 

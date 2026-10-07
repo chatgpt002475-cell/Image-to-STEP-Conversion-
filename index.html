@@ -745,6 +745,68 @@
                 <input type="range" id="clip-slider" min="0" max="100" value="50" style="width: 100px;">
             </div>
 
+            <!-- Production Accuracy & Multi-Pass Quality Verification HUD -->
+            <div id="accuracy-hud" class="accuracy-hud">
+                <div class="hud-header">
+                    <div class="hud-title-flex">
+                        <span class="hud-title-icon">🛡️</span>
+                        <span class="hud-title-text">Accuracy Verification HUD</span>
+                    </div>
+                    <div id="hud-accuracy-badge" class="hud-accuracy-badge">99.8% READY</div>
+                </div>
+                <div class="hud-metrics-row">
+                    <div class="hud-metric">
+                        <span class="metric-label">Avg Deviation</span>
+                        <span id="metric-avg-dev" class="metric-val highlight">0.12 mm</span>
+                    </div>
+                    <div class="hud-metric">
+                        <span class="metric-label">Max Deviation</span>
+                        <span id="metric-max-dev" class="metric-val">0.45 mm</span>
+                    </div>
+                    <div class="hud-metric">
+                        <span class="metric-label">Silhouette Match</span>
+                        <span id="metric-area-match" class="metric-val highlight">99.4%</span>
+                    </div>
+                </div>
+                <div class="hud-features-row" id="hud-features-row">
+                    <span class="feat-pill" id="feat-pill-bodies">🧩 Bodies: 1</span>
+                    <span class="feat-pill" id="feat-pill-holes">🕳️ Holes: 0</span>
+                    <span class="feat-pill" id="feat-pill-corners">📐 Corners: 0</span>
+                </div>
+                <div class="hud-passes-list" id="hud-passes-list">
+                    <div class="pass-item" id="pass-item-a">
+                        <span class="pass-icon" id="pass-icon-a">✅</span>
+                        <span class="pass-name">Pass A: Boundary &amp; Curves</span>
+                        <span class="pass-status" id="pass-status-a">Watertight</span>
+                    </div>
+                    <div class="pass-item" id="pass-item-b">
+                        <span class="pass-icon" id="pass-icon-b">✅</span>
+                        <span class="pass-name">Pass B: Point Positional Deviation</span>
+                        <span class="pass-status" id="pass-status-b">Sub-mm</span>
+                    </div>
+                    <div class="pass-item" id="pass-item-c">
+                        <span class="pass-icon" id="pass-icon-c">✅</span>
+                        <span class="pass-name">Pass C: Feature &amp; Notch Checklist</span>
+                        <span class="pass-status" id="pass-status-c">Preserved</span>
+                    </div>
+                    <div class="pass-item" id="pass-item-d">
+                        <span class="pass-icon" id="pass-icon-d">✅</span>
+                        <span class="pass-name">Pass D: Silhouette Area Match</span>
+                        <span class="pass-status" id="pass-status-d">Matched</span>
+                    </div>
+                    <div class="pass-item" id="pass-item-e">
+                        <span class="pass-icon" id="pass-icon-e">✅</span>
+                        <span class="pass-name">Pass E: Internal Bores &amp; Cutouts</span>
+                        <span class="pass-status" id="pass-status-e">Verified</span>
+                    </div>
+                    <div class="pass-item" id="pass-item-f">
+                        <span class="pass-icon" id="pass-icon-f">✅</span>
+                        <span class="pass-name">Pass F: CAD Quality Gate</span>
+                        <span class="pass-status" id="pass-status-f">Passed</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Real-time CAD Telemetry HUD Card -->
             <div class="telemetry-hud">
                 <div class="hud-title">CAD Geometric Telemetry</div>

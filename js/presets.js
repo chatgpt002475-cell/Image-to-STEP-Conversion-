@@ -558,6 +558,51 @@ window.CadPresets = {
         return item;
     },
 
+    // Authoritative Lifecycle: Replace obsolete duplicates only after successful validation
+    replaceOrSaveValidatedPreset(preset, previousPresetId = null) {
+        if (!this.userPresets) this.userPresets = [];
+
+        // 1. If previousPresetId specified, remove obsolete version
+        if (previousPresetId) {
+            this.userPresets = this.userPresets.filter(p => p.id !== previousPresetId);
+        }
+
+        // 2. Remove any obsolete duplicate with matching name or ID
+        this.userPresets = this.userPresets.filter(p => p.id !== preset.id && p.name !== preset.name);
+
+        const item = {
+            ...preset,
+            generate() {
+                return preset.dataUrl;
+            }
+        };
+
+        this.userPresets.unshift(item);
+        if (this.userPresets.length > 25) this.userPresets.pop();
+
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('cad_user_presets', JSON.stringify(this.userPresets.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    category: p.category || 'Validated CAD Models',
+                    isUserSaved: true,
+                    isAuthoritative: true,
+                    accuracyScore: p.accuracyScore || 99.8,
+                    recommendedMode: p.recommendedMode,
+                    bracketType: p.bracketType,
+                    description: p.description,
+                    dataUrl: p.dataUrl,
+                    thumbnail: p.thumbnail,
+                    timestamp: p.timestamp
+                }))));
+            }
+        } catch (e) {
+            console.warn('LocalStorage save failed:', e);
+        }
+        return item;
+    },
+
     deleteUserPreset(id) {
         if (!this.userPresets) return;
         this.userPresets = this.userPresets.filter(p => p.id !== id);

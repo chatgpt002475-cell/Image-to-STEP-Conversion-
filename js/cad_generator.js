@@ -88,9 +88,11 @@ window.CadGenerator = {
         };
 
         const partGeometries = [];
-        const simplify = (pts, eps) => (typeof window !== 'undefined' && window.ImageProcessor && window.ImageProcessor.simplifyDouglasPeucker)
-            ? window.ImageProcessor.simplifyDouglasPeucker(pts, eps)
-            : pts;
+        const simplify = (pts, eps) => (typeof window !== 'undefined' && window.ImageProcessor && window.ImageProcessor.simplifyPointPreserving)
+            ? window.ImageProcessor.simplifyPointPreserving(pts, 13.5, Math.min(0.55, eps * 0.35))
+            : (typeof window !== 'undefined' && window.ImageProcessor && window.ImageProcessor.simplifyDouglasPeucker)
+                ? window.ImageProcessor.simplifyDouglasPeucker(pts, eps)
+                : pts;
 
         // 3. Extrude EVERY detected outer contour into a solid part
         outerContours.forEach((outerContour) => {
@@ -124,11 +126,23 @@ window.CadGenerator = {
                         h.bbox.minY >= outerContour.bbox.minY - 2 &&
                         h.bbox.maxY <= outerContour.bbox.maxY + 2
                     );
-                }).sort((a, b) => b.area - a.area).slice(0, 20);
+                }).sort((a, b) => b.area - a.area).slice(0, 28);
 
                 partHoles.forEach(hole => {
                     try {
-                        const simplifiedHole = simplify(hole.points, Math.max(1.5, epsilon));
+                        // High-Accuracy Parametric Circle Hole Reconstruction
+                        if (hole.isParametricCircle && hole.circleCenter && hole.circleRadius) {
+                            const hcx = (hole.circleCenter.x - offsetX) * scale;
+                            const hcy = -(hole.circleCenter.y - offsetY) * scale;
+                            const hr = hole.circleRadius * scale;
+                            const holePath = new THREE.Path();
+                            // In Three.js, holes in Shape must be clockwise. absarc(x,y,r,sAngle,eAngle,clockwise)
+                            holePath.absarc(hcx, hcy, hr, 0, Math.PI * 2, true);
+                            shape.holes.push(holePath);
+                            return;
+                        }
+
+                        const simplifiedHole = simplify(hole.points, Math.max(1.0, epsilon));
                         if (simplifiedHole.length >= 3) {
                             let holePoints2D = simplifiedHole.map(pt => ({
                                 x: (pt.x - offsetX) * scale,
