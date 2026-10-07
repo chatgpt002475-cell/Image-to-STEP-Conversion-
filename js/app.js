@@ -335,8 +335,30 @@ class ImageToCadApp {
         const pullTo3dBtn = document.getElementById('btn-pull-to-3d');
         if (pullTo3dBtn) pullTo3dBtn.addEventListener('click', triggerPullTo3d);
 
-        const headerPullTo3dBtn = document.getElementById('header-btn-pull-3d');
-        if (headerPullTo3dBtn) headerPullTo3dBtn.addEventListener('click', triggerPullTo3d);
+        // Reset Operations Event Handlers (Header Button & Reset Panel)
+        const headerResetBtn = document.getElementById('btn-header-reset');
+        if (headerResetBtn) {
+            headerResetBtn.addEventListener('click', () => this.resetOperations(true));
+        }
+
+        const btnExecResetAll = document.getElementById('btn-execute-reset-all');
+        if (btnExecResetAll) {
+            btnExecResetAll.addEventListener('click', () => this.resetOperations(true));
+        }
+
+        const btnResetParamsOnly = document.getElementById('btn-reset-params-only');
+        if (btnResetParamsOnly) {
+            btnResetParamsOnly.addEventListener('click', () => this.resetOperations(false));
+        }
+
+        const btnResetLoadSample = document.getElementById('btn-reset-load-sample');
+        if (btnResetLoadSample) {
+            btnResetLoadSample.addEventListener('click', async () => {
+                this.resetOperations(true);
+                this.setInputSource('preset');
+                await this.loadPreset('flange');
+            });
+        }
 
         // Export Buttons
         document.getElementById('export-step').addEventListener('click', () => this.exportStep());
@@ -435,6 +457,150 @@ class ImageToCadApp {
         const sketchUndoBtn = document.getElementById('sketch-undo');
         if (sketchUndoBtn) {
             sketchUndoBtn.addEventListener('click', () => this.sketcher.undo());
+        }
+    }
+
+    resetOperations(fullReset = true) {
+        try {
+            // 1. If an active model/image exists, archive it first to Presets Library so work is never lost
+            if (this.currentImg || this.currentGeometry) {
+                this.archiveCurrentPartToPresets();
+            }
+
+            // 2. Wipe 3D graphic window cleanly
+            this.viewport.clearModel();
+            if (this.viewport.currentImage) {
+                this.viewport.currentImage = null;
+                this.viewport.currentImageDimensions = null;
+            }
+
+            // 3. Clear application state
+            this.currentImg = null;
+            this.processedData = null;
+            this.currentContours = [];
+            this.currentGeometry = null;
+            this.currentScanResult = null;
+            this.currentDimensions = null;
+            this.lastLoadedFileName = null;
+            this.currentPartName = null;
+            this.hasCustomImage = false;
+            this.userExplicitlyChoseTemplate = false;
+
+            // 4. Wipe 2D image preview canvas
+            const previewCanvas = document.getElementById('image-preview-canvas');
+            if (previewCanvas) {
+                const pctx = previewCanvas.getContext('2d');
+                pctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            }
+
+            // 5. Clear sketch canvas if initialized
+            if (this.sketcher && typeof this.sketcher.clear === 'function') {
+                this.sketcher.clear();
+            }
+
+            // 6. Reset CAD Feature Tree UI
+            const treeContainer = document.getElementById('feature-inventory-container');
+            if (treeContainer) {
+                treeContainer.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:10px;">Scan source image to extract CAD feature tree...</div>';
+            }
+            const treeBadge = document.getElementById('feature-tree-count-badge');
+            if (treeBadge) treeBadge.textContent = '0 Items';
+
+            // 7. Reset Sheet Thickness Detection status
+            const thickVal = document.getElementById('thickness-detection-val');
+            if (thickVal) thickVal.textContent = 'Auto-Detecting...';
+
+            // 8. Reset Validation HUD
+            const hudBadge = document.getElementById('hud-accuracy-badge');
+            if (hudBadge) {
+                hudBadge.textContent = 'STANDBY';
+                hudBadge.className = 'hud-accuracy-badge';
+            }
+            const devEl = document.getElementById('hud-dev-mm');
+            if (devEl) devEl.textContent = '0.00 mm';
+            const reconEl = document.getElementById('hud-recon-rate');
+            if (reconEl) reconEl.textContent = '0%';
+            const silEl = document.getElementById('hud-silhouette-score');
+            if (silEl) silEl.textContent = '0%';
+            const passesEl = document.getElementById('hud-passes-count');
+            if (passesEl) passesEl.textContent = '0/10 PASS';
+
+            document.querySelectorAll('.hud-pass-item').forEach(item => {
+                item.className = 'hud-pass-item';
+                const statusSpan = item.querySelector('.hud-pass-status');
+                if (statusSpan) statusSpan.textContent = 'STANDBY';
+            });
+
+            // 9. Reset Detected Features UI
+            const featCont = document.getElementById('detected-features-content');
+            if (featCont) {
+                featCont.innerHTML = '<div style="color:var(--text-muted); font-size:11px; text-align:center; padding:8px;">No features detected yet</div>';
+            }
+
+            // 10. Reset Telemetry UI
+            const statDim = document.getElementById('stat-dim');
+            if (statDim) statDim.textContent = '0 × 0 × 0 mm';
+            const statTris = document.getElementById('stat-triangles');
+            if (statTris) statTris.textContent = '0';
+            const statVerts = document.getElementById('stat-vertices');
+            if (statVerts) statVerts.textContent = '0';
+            const statContours = document.getElementById('stat-contours');
+            if (statContours) statContours.textContent = '0';
+
+            // 11. Reset Sliders and Controls back to standard engineering values
+            if (fullReset) {
+                const resetInput = (id, val, textValId) => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.value = val;
+                        if (el.type === 'checkbox') el.checked = Boolean(val);
+                    }
+                    if (textValId) {
+                        const tel = document.getElementById(textValId);
+                        if (tel) tel.textContent = val;
+                    }
+                };
+
+                // General
+                resetInput('param-width', 100, 'param-width-val');
+                resetInput('param-threshold', 128, 'param-threshold-val');
+                resetInput('param-auto-thresh', false);
+                resetInput('param-invert', false);
+                resetInput('param-blur', 0, 'param-blur-val');
+                resetInput('param-epsilon', 1.5, 'param-epsilon-val');
+
+                // Extrude
+                resetInput('param-extrude-depth', 15, 'param-extrude-depth-val');
+                resetInput('param-extrude-bevel', false);
+                resetInput('param-bevel-thick', 1.5, 'param-bevel-thick-val');
+                resetInput('param-extrude-axis', 'z');
+
+                // Sheet Metal
+                resetInput('param-sm-thick', 2.0, 'param-sm-thick-val');
+                resetInput('param-sm-bend-r', 2.0, 'param-sm-bend-r-val');
+                this.sheetMetalForm = 'folded';
+                const btnFolded = document.getElementById('btn-sm-form-folded');
+                const btnFlat = document.getElementById('btn-sm-form-flat');
+                if (btnFolded) btnFolded.classList.add('active');
+                if (btnFlat) btnFlat.classList.remove('active');
+                this.setSheetMetalType('custom');
+
+                // Clear file inputs
+                const fileIn = document.getElementById('file-input');
+                if (fileIn) fileIn.value = '';
+                const folderIn = document.getElementById('folder-input');
+                if (folderIn) folderIn.value = '';
+                const folderPartsContainer = document.getElementById('folder-parts-container');
+                if (folderPartsContainer) folderPartsContainer.classList.add('hidden');
+            }
+
+            // Reset camera to standard Isometric view
+            this.viewport.setView('iso');
+
+            this.showToast('🔄 Operations and 3D Graphic Window reset successfully!', 'info');
+        } catch (err) {
+            console.error('Reset operations error:', err);
+            this.showToast('Reset error: ' + err.message, 'error');
         }
     }
 
@@ -816,6 +982,8 @@ class ImageToCadApp {
         document.getElementById('upload-panel').classList.toggle('hidden', source !== 'upload');
         document.getElementById('preset-panel').classList.toggle('hidden', source !== 'preset');
         document.getElementById('sketch-panel').classList.toggle('hidden', source !== 'sketch');
+        const resetPanel = document.getElementById('reset-panel');
+        if (resetPanel) resetPanel.classList.toggle('hidden', source !== 'reset');
 
         if (source === 'sketch') {
             this.handleSketchUpdate(this.sketcher.getImageDataUrl());

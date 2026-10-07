@@ -48,6 +48,11 @@
                 STL (ASCII)
             </button>
 
+            <!-- Reset Operations -->
+            <button id="btn-header-reset" class="btn btn-secondary" title="Reset all CAD operations, wipe 3D workspace, and restore default parameters" style="border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; background: rgba(239, 68, 68, 0.08); font-size: 11px; padding: 4px 10px; font-weight: 600;">
+                <span>🔄</span> Reset Operations
+            </button>
+
             <!-- Primary Pull to 3D Graphic Window Button -->
             <button id="header-btn-pull-3d" class="btn btn-primary" title="Pull detected contours from the uploaded image into the 3D graphic window" style="background: linear-gradient(135deg, #00d2ff, #0066ff); font-weight: 700; box-shadow: 0 0 14px rgba(0, 210, 255, 0.5);">
                 <span>⚡</span> Pull into 3D Graphic Window
@@ -73,6 +78,7 @@
                     <div class="nav-tab input-tab active" data-source="upload">Upload Image</div>
                     <div class="nav-tab input-tab" data-source="preset">Presets Library</div>
                     <div class="nav-tab input-tab" data-source="sketch">Draw 2D Sketch</div>
+                    <div class="nav-tab input-tab" data-source="reset" id="tab-reset-operations" title="Reset all CAD operations, wipe 3D workspace, and restore defaults">🔄 Reset Operations</div>
                 </div>
 
                 <!-- Source: Upload -->
@@ -127,6 +133,35 @@
                             <span>Size:</span>
                             <input type="range" id="sketch-brush-size" min="4" max="40" value="14">
                         </div>
+                    </div>
+                </div>
+
+                <!-- Source: Reset Operations Panel -->
+                <div id="reset-panel" class="hidden" style="padding:14px; background:rgba(15,23,42,0.65); border:1px solid var(--border-color); border-radius:var(--radius-md);">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                        <span style="font-size:20px;">🔄</span>
+                        <div>
+                            <div style="font-weight:700; font-size:13px; color:var(--text-primary);">Reset Operations &amp; Workspace</div>
+                            <div style="font-size:10px; color:var(--text-secondary);">Wipe graphics window, clear scans, and restore CAD defaults</div>
+                        </div>
+                    </div>
+
+                    <div style="font-size:11px; color:var(--text-secondary); line-height:1.45; margin-bottom:12px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); border-radius:4px; padding:8px 10px;">
+                        <strong style="color:#f87171;">Safe Reset:</strong> Before wiping, your active CAD part is automatically archived to the Presets Library so work is never lost.
+                    </div>
+
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                        <button type="button" id="btn-execute-reset-all" class="btn btn-primary" style="background:linear-gradient(135deg, #ef4444, #b91c1c); color:#fff; font-weight:700; justify-content:center; padding:9px 12px; font-size:12px; box-shadow:0 0 12px rgba(239,68,68,0.35);">
+                            <span>🔄</span> Reset All Operations &amp; Clear Viewport
+                        </button>
+
+                        <button type="button" id="btn-reset-params-only" class="btn btn-secondary" style="justify-content:center; font-size:11px; padding:7px 10px;">
+                            <span>⚙️</span> Reset Sliders &amp; Parameters Only
+                        </button>
+
+                        <button type="button" id="btn-reset-load-sample" class="btn btn-secondary" style="justify-content:center; font-size:11px; padding:7px 10px; border-color:rgba(6,182,212,0.4); color:var(--accent-cyan);">
+                            <span>🏭</span> Reset &amp; Load Industrial Sample
+                        </button>
                     </div>
                 </div>
             </div>

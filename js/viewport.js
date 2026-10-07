@@ -164,6 +164,9 @@ window.CadViewport = class {
                 if (child.material) child.material.dispose();
             }
         }
+
+        this.currentImage = null;
+        this.currentImageDimensions = null;
     }
 
     // Load or update 3D CAD model
