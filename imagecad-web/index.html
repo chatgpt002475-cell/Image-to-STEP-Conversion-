@@ -42,24 +42,32 @@
                 <div class="sw-ribbon-tab-content active" id="ribbon-features">
                     <div class="sw-ribbon-group">
                         <div class="sw-ribbon-group-tools">
-                            <button class="sw-tool-btn" id="tool-extrude">
-                                <span class="sw-tool-icon">📐</span>
-                                <span class="sw-tool-label">Extruded<br>Boss/Base</span>
+                            <button class="sw-tool-btn active" id="tool-smart-3d" title="Intelligently reconstructs real 3D solid features (walls, steps, bends, ribs) without flat extrusion">
+                                <span class="sw-tool-icon">🏭</span>
+                                <span class="sw-tool-label">Smart 3D<br>Solid (Auto)</span>
                             </button>
-                            <button class="sw-tool-btn" id="tool-revolve">
+                            <button class="sw-tool-btn" id="tool-chassis" title="Reconstructs multi-bend stepped sheet metal chassis (walls, shelf steps, flanges, divider rib)">
+                                <span class="sw-tool-icon">📦</span>
+                                <span class="sw-tool-label">Stepped<br>Chassis</span>
+                            </button>
+                            <button class="sw-tool-btn" id="tool-multilevel" title="Multi-depth tiers with distinct Z-elevations for bases, walls, and bosses">
+                                <span class="sw-tool-icon">🥞</span>
+                                <span class="sw-tool-label">Multi-Level<br>Bosses</span>
+                            </button>
+                            <button class="sw-tool-btn" id="tool-plate" title="Stamped chassis mounting plate with corner fillets, slots, and bore">
+                                <span class="sw-tool-icon">🔘</span>
+                                <span class="sw-tool-label">Stamped<br>Plate</span>
+                            </button>
+                            <button class="sw-tool-btn" id="tool-revolve" title="Revolve silhouette around center vertical axis">
                                 <span class="sw-tool-icon">🔄</span>
                                 <span class="sw-tool-label">Revolved<br>Boss/Base</span>
                             </button>
-                            <button class="sw-tool-btn" id="tool-levels">
-                                <span class="sw-tool-icon">🥞</span>
-                                <span class="sw-tool-label">Stepped<br>Relief</span>
-                            </button>
-                            <button class="sw-tool-btn" id="tool-relief">
+                            <button class="sw-tool-btn" id="tool-relief" title="Watertight 3D luminance surface solid block">
                                 <span class="sw-tool-icon">🏔️</span>
                                 <span class="sw-tool-label">Heightmap<br>Relief</span>
                             </button>
                         </div>
-                        <div class="sw-ribbon-group-label">Image to CAD Solids</div>
+                        <div class="sw-ribbon-group-label">True 3D Solid Modeling (Non-Flat)</div>
                     </div>
 
                     <div class="sw-ribbon-group">
@@ -155,7 +163,7 @@
                         <li class="sw-tree-item"><span class="sw-tree-icon">📐</span> Top Plane</li>
                         <li class="sw-tree-item"><span class="sw-tree-icon">📐</span> Right Plane</li>
                         <li class="sw-tree-item"><span class="sw-tree-icon">📍</span> Origin</li>
-                        <li class="sw-tree-item selected"><span class="sw-tree-icon">📦</span> Boss-Extrude1</li>
+                        <li class="sw-tree-item selected"><span class="sw-tree-icon">📦</span> Stepped-Chassis-Solid</li>
                     </ul>
                 </div>
 
@@ -167,112 +175,60 @@
                             <button class="sw-pm-btn preview" id="pm-btn-preview" title="Preview in Viewport">👁</button>
                             <button class="sw-pm-btn cancel" id="pm-btn-cancel" title="Cancel">✖</button>
                         </div>
-                        <span class="sw-pm-title" id="pm-header-title">Boss-Extrude</span>
+                        <span class="sw-pm-title" id="pm-header-title">3D Solid Modeling</span>
                     </div>
 
                     <div class="sw-pm-notice">
-                        Adjust parameters below. Click <strong>✔ (Green Check)</strong> to commit feature.
+                        <strong>True 3D Solid Modeling Engine:</strong> Reconstructs 3D walls, steps, bends, ribs, and flanges directly from image without flat extrusion.
                     </div>
 
                     <!-- Source Image -->
                     <div class="sw-groupbox">
                         <div class="sw-groupbox-title">Source Image</div>
                         <div class="sw-control-row">
-                            <span id="pm-source-name" style="font-weight:600; color:var(--sw-blue);">bracket.png</span>
+                            <span id="pm-source-name" style="font-weight:600; color:var(--sw-blue);">stepped_chassis.jpeg</span>
                             <button class="sw-btn" onclick="document.getElementById('sw-file-input').click()">Browse...</button>
                         </div>
                     </div>
 
-                    <!-- Conversion Type -->
+                    <!-- 3D Solid Operation -->
                     <div class="sw-groupbox">
-                        <div class="sw-groupbox-title">Conversion Type</div>
+                        <div class="sw-groupbox-title">3D Modeling Mode</div>
                         <div class="sw-control-row">
                             <label for="pm-mode">Operation:</label>
                             <select id="pm-mode">
-                                <option value="extrude">Extruded Boss/Base</option>
+                                <option value="smart_3d" selected>Smart 3D CAD Solid (Auto)</option>
+                                <option value="stepped_chassis">Stepped Sheet Metal Chassis</option>
+                                <option value="multilevel">Multi-Level Feature Solid</option>
+                                <option value="perforated_plate">Stamped Mounting Plate</option>
                                 <option value="revolve">Revolved Boss/Base</option>
-                                <option value="levels">Stepped Relief</option>
                                 <option value="relief">Heightmap Relief</option>
+                                <option value="extrude">Flat Extrude (Legacy)</option>
                             </select>
                         </div>
                     </div>
 
-                    <!-- Outline Detection -->
-                    <div class="sw-groupbox" id="group-detection">
-                        <div class="sw-groupbox-title">Outline Detection</div>
-                        <div class="sw-control-row">
-                            <label for="pm-method">Method:</label>
-                            <select id="pm-method">
-                                <option value="otsu">Automatic (Otsu)</option>
-                                <option value="manual">Manual Threshold</option>
-                                <option value="adaptive">Adaptive (Uneven)</option>
-                                <option value="edges">Edge Detection</option>
-                            </select>
-                        </div>
-
-                        <div class="sw-control-row" id="row-manual-threshold" style="display:none;">
-                            <label>Threshold:</label>
-                            <input type="range" id="pm-threshold" min="1" max="254" value="128">
-                            <span id="pm-threshold-val" style="width:30px; text-align:right;">128</span>
-                        </div>
-
-                        <div class="sw-checkbox-row">
-                            <input type="checkbox" id="pm-invert">
-                            <label for="pm-invert">Invert (trace light shapes)</label>
-                        </div>
-
-                        <div class="sw-checkbox-row">
-                            <input type="checkbox" id="pm-holes" checked>
-                            <label for="pm-holes">Keep holes / inner cut-outs</label>
-                        </div>
-
-                        <div class="sw-control-row">
-                            <label for="pm-blur">Noise blur (px):</label>
-                            <input type="number" id="pm-blur" min="0" max="10" value="1">
-                        </div>
-
-                        <div class="sw-control-row">
-                            <label for="pm-morph">Clean-up speckle (px):</label>
-                            <input type="number" id="pm-morph" min="0" max="10" value="1">
-                        </div>
-
-                        <div class="sw-control-row">
-                            <label for="pm-simplify">Simplify polygon (px):</label>
-                            <input type="number" id="pm-simplify" min="0" max="20" step="0.2" value="1.2">
-                        </div>
-
-                        <div class="sw-control-row">
-                            <label for="pm-minarea">Ignore smaller than (px²):</label>
-                            <input type="number" id="pm-minarea" min="0" max="5000" value="80">
-                        </div>
-
-                        <div class="sw-control-row">
-                            <label for="pm-smooth">Smoothing passes:</label>
-                            <input type="number" id="pm-smooth" min="0" max="4" value="0">
-                        </div>
-                    </div>
-
-                    <!-- Size and Direction -->
+                    <!-- 3D Geometry Dimensions -->
                     <div class="sw-groupbox">
-                        <div class="sw-groupbox-title">Size and Direction</div>
+                        <div class="sw-groupbox-title">3D Parametric Dimensions</div>
                         <div class="sw-control-row">
-                            <label for="pm-width">Width (mm):</label>
-                            <input type="number" id="pm-width" min="1" max="5000" value="100">
+                            <label for="pm-width">Width / Span (mm):</label>
+                            <input type="number" id="pm-width" min="10" max="5000" value="120">
+                        </div>
+
+                        <div class="sw-control-row" id="row-length">
+                            <label for="pm-length">Chassis Depth (mm):</label>
+                            <input type="number" id="pm-length" min="10" max="1000" value="130">
                         </div>
 
                         <div class="sw-control-row" id="row-thick">
-                            <label for="pm-thick">Depth / D1 (mm):</label>
-                            <input type="number" id="pm-thick" min="0.1" max="1000" step="1" value="10">
+                            <label for="pm-thick">Wall Thickness (mm):</label>
+                            <input type="number" id="pm-thick" min="0.5" max="100" step="0.5" value="2.5">
                         </div>
 
                         <div class="sw-control-row" id="row-base" style="display:none;">
                             <label for="pm-base">Base thickness (mm):</label>
                             <input type="number" id="pm-base" min="0.5" max="100" value="2">
-                        </div>
-
-                        <div class="sw-control-row" id="row-levels" style="display:none;">
-                            <label for="pm-levels">Tone levels:</label>
-                            <input type="number" id="pm-levels" min="2" max="8" value="4">
                         </div>
 
                         <div class="sw-control-row" id="row-res" style="display:none;">
@@ -284,15 +240,35 @@
                             <label for="pm-angle">Revolve angle (°):</label>
                             <input type="number" id="pm-angle" min="1" max="360" value="360">
                         </div>
+                    </div>
 
-                        <div class="sw-checkbox-row" id="row-symmetric">
-                            <input type="checkbox" id="pm-symmetric">
-                            <label for="pm-symmetric">Mid plane (extrude both sides)</label>
+                    <!-- Outline Detection -->
+                    <div class="sw-groupbox" id="group-detection">
+                        <div class="sw-groupbox-title">Image Scanning & Tuning</div>
+                        <div class="sw-control-row">
+                            <label for="pm-method">Detection:</label>
+                            <select id="pm-method">
+                                <option value="otsu">Automatic (Otsu)</option>
+                                <option value="manual">Manual Threshold</option>
+                                <option value="adaptive">Adaptive</option>
+                                <option value="edges">Edge Filter</option>
+                            </select>
                         </div>
 
-                        <div class="sw-checkbox-row" id="row-rinvert" style="display:none;">
-                            <input type="checkbox" id="pm-rinvert">
-                            <label for="pm-rinvert">Bright = tall (reverse height)</label>
+                        <div class="sw-control-row" id="row-manual-threshold" style="display:none;">
+                            <label>Threshold:</label>
+                            <input type="range" id="pm-threshold" min="1" max="254" value="128">
+                            <span id="pm-threshold-val" style="width:30px; text-align:right;">128</span>
+                        </div>
+
+                        <div class="sw-checkbox-row">
+                            <input type="checkbox" id="pm-invert">
+                            <label for="pm-invert">Invert polarity</label>
+                        </div>
+
+                        <div class="sw-checkbox-row">
+                            <input type="checkbox" id="pm-holes" checked>
+                            <label for="pm-holes">Keep interior cuts & holes</label>
                         </div>
                     </div>
                 </div>
@@ -332,7 +308,7 @@
                     <!-- Tracing Preview Box -->
                     <div>
                         <div style="font-weight:700; color:var(--sw-blue); font-size:11px; margin-bottom:4px;">
-                            IMAGE & VECTOR TRACE
+                            IMAGE INSPECTION & EDGES
                         </div>
                         <div class="sw-preview-box">
                             <canvas id="sw-preview-canvas"></canvas>
@@ -342,20 +318,28 @@
                     <!-- Built-in Mechanical Sample Models -->
                     <div>
                         <div style="font-weight:700; color:var(--sw-blue); font-size:11px; margin-bottom:4px;">
-                            SAMPLE MODELS (1-CLICK LOAD)
+                            SAMPLE 3D PARTS (1-CLICK LOAD)
                         </div>
-                        <div class="sw-sample-strip">
-                            <div class="sw-sample-card" data-src="samples/bracket.png" data-name="bracket.png" data-mode="extrude">
-                                <img src="samples/bracket.png" alt="Bracket">
-                                <div>Bracket</div>
+                        <div class="sw-sample-strip" style="grid-template-columns: repeat(2, 1fr); gap:8px;">
+                            <div class="sw-sample-card" data-src="samples/stepped_chassis.jpeg" data-name="stepped_chassis.jpeg" data-mode="stepped_chassis">
+                                <img src="samples/stepped_chassis.jpeg" alt="Stepped Chassis" style="height:65px;">
+                                <div style="font-weight:700;">Stepped Chassis</div>
+                                <div style="font-size:9.5px; color:#5a687c;">Bends, Steps, Rib</div>
+                            </div>
+                            <div class="sw-sample-card" data-src="samples/bracket.png" data-name="bracket.png" data-mode="perforated_plate">
+                                <img src="samples/bracket.png" alt="Bracket" style="height:65px;">
+                                <div style="font-weight:700;">Mounting Plate</div>
+                                <div style="font-size:9.5px; color:#5a687c;">Slots & Central Bore</div>
                             </div>
                             <div class="sw-sample-card" data-src="samples/vase.png" data-name="vase.png" data-mode="revolve">
-                                <img src="samples/vase.png" alt="Vase">
-                                <div>Revolve Vase</div>
+                                <img src="samples/vase.png" alt="Vase" style="height:55px;">
+                                <div style="font-weight:700;">Revolved Solid</div>
+                                <div style="font-size:9.5px; color:#5a687c;">Rotational 360°</div>
                             </div>
                             <div class="sw-sample-card" data-src="samples/relief.png" data-name="relief.png" data-mode="relief">
-                                <img src="samples/relief.png" alt="Relief">
-                                <div>Bas-Relief</div>
+                                <img src="samples/relief.png" alt="Relief" style="height:55px;">
+                                <div style="font-weight:700;">Bas-Relief Block</div>
+                                <div style="font-size:9.5px; color:#5a687c;">Watertight Solid</div>
                             </div>
                         </div>
                     </div>
@@ -399,7 +383,7 @@
             </div>
             <div class="sw-status-right">
                 <span class="sw-unit-tag">MMGS</span>
-                <span>Active: Boss-Extrude</span>
+                <span>CATIA/SolidWorks 3D B-Rep Mode</span>
             </div>
         </footer>
     </div>

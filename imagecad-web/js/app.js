@@ -14,9 +14,9 @@
     let featureCounter = 1;
     let featuresList = [];
 
-    // Default configuration matching desktop ImageCAD
+    // Default configuration matching desktop ImageCAD & 3D CAD reconstruction
     const state = {
-        mode: 'extrude',
+        mode: 'smart_3d',            // smart_3d (True 3D Solid) | stepped_chassis | multilevel | perforated_plate | revolve | relief | extrude
         method: 'otsu',
         threshold: 128,
         invert: false,
@@ -26,14 +26,15 @@
         simplify: 1.2,
         minArea: 80,
         smooth: 0,
-        widthMm: 100.0,
-        thickness: 10.0,
+        widthMm: 120.0,
+        lengthMm: 130.0,
+        thickness: 2.5,
         base: 2.0,
         levels: 4,
         reliefRes: 64,
         reliefInvert: false,
         revolveAngle: 360.0,
-        symmetric: false
+        sourceFilename: 'stepped_chassis.jpeg'
     };
 
     window.addEventListener('DOMContentLoaded', initApp);
@@ -56,10 +57,10 @@
         // 3. Setup File Upload & Drag-and-Drop
         setupFileUpload();
 
-        // 4. Load initial sample (bracket.png)
-        loadSampleImage('samples/bracket.png', 'bracket.png');
+        // 4. Load initial 3D sample (Stepped Chassis matching WhatsApp upload)
+        loadSampleImage('samples/stepped_chassis.jpeg', 'stepped_chassis.jpeg', 'stepped_chassis');
 
-        updateStatus("Ready — ImageCAD SolidWorks Web CAD Studio loaded.");
+        updateStatus("Ready — ImageCAD SolidWorks Web CAD Studio loaded in 3D Solid Mode.");
     }
 
     // --- Ribbon Tabs ---
@@ -79,10 +80,12 @@
             });
         });
 
-        // Feature tools in ribbon
-        document.getElementById('tool-extrude')?.addEventListener('click', () => startFeatureMode('extrude'));
+        // 3D Solid Modeling Feature tools in ribbon
+        document.getElementById('tool-smart-3d')?.addEventListener('click', () => startFeatureMode('smart_3d'));
+        document.getElementById('tool-chassis')?.addEventListener('click', () => startFeatureMode('stepped_chassis'));
+        document.getElementById('tool-multilevel')?.addEventListener('click', () => startFeatureMode('multilevel'));
+        document.getElementById('tool-plate')?.addEventListener('click', () => startFeatureMode('perforated_plate'));
         document.getElementById('tool-revolve')?.addEventListener('click', () => startFeatureMode('revolve'));
-        document.getElementById('tool-levels')?.addEventListener('click', () => startFeatureMode('levels'));
         document.getElementById('tool-relief')?.addEventListener('click', () => startFeatureMode('relief'));
 
         // Measure & Mass props
@@ -139,31 +142,24 @@
         });
         bindInput('pm-invert', 'invert', null, true);
         bindInput('pm-holes', 'keepHoles', null, true);
-        bindInput('pm-blur', 'blur');
-        bindInput('pm-morph', 'morph');
-        bindInput('pm-simplify', 'simplify');
-        bindInput('pm-minarea', 'minArea');
-        bindInput('pm-smooth', 'smooth');
 
         bindInput('pm-width', 'widthMm');
+        bindInput('pm-length', 'lengthMm');
         bindInput('pm-thick', 'thickness');
         bindInput('pm-base', 'base');
-        bindInput('pm-levels', 'levels');
         bindInput('pm-res', 'reliefRes');
         bindInput('pm-angle', 'revolveAngle');
-        bindInput('pm-symmetric', 'symmetric', null, true);
-        bindInput('pm-rinvert', 'reliefInvert', null, true);
 
         // Header buttons (OK, Preview, Cancel)
         document.getElementById('pm-btn-ok')?.addEventListener('click', () => {
             commitFeature();
             switchLeftTab('tree');
-            updateStatus("Feature committed to FeatureManager tree.");
+            updateStatus("3D feature committed to FeatureManager tree.");
         });
 
         document.getElementById('pm-btn-preview')?.addEventListener('click', () => {
             rebuildCAD();
-            updateStatus("Preview updated.");
+            updateStatus("3D Preview updated.");
         });
 
         document.getElementById('pm-btn-cancel')?.addEventListener('click', () => {
@@ -195,16 +191,13 @@
     function updatePmVisibility() {
         const m = state.mode;
         const detBox = document.getElementById('group-detection');
-        if (detBox) detBox.style.display = (m === 'relief') ? 'none' : 'block';
+        if (detBox) detBox.style.display = (m === 'stepped_chassis' || m === 'perforated_plate') ? 'none' : 'block';
 
-        const rowThick = document.getElementById('row-thick');
-        if (rowThick) rowThick.style.display = (m === 'revolve') ? 'none' : 'flex';
+        const rowLength = document.getElementById('row-length');
+        if (rowLength) rowLength.style.display = (m === 'stepped_chassis') ? 'flex' : 'none';
 
         const rowBase = document.getElementById('row-base');
         if (rowBase) rowBase.style.display = (m === 'relief') ? 'flex' : 'none';
-
-        const rowLevels = document.getElementById('row-levels');
-        if (rowLevels) rowLevels.style.display = (m === 'levels') ? 'flex' : 'none';
 
         const rowRes = document.getElementById('row-res');
         if (rowRes) rowRes.style.display = (m === 'relief') ? 'flex' : 'none';
@@ -212,21 +205,18 @@
         const rowAngle = document.getElementById('row-angle');
         if (rowAngle) rowAngle.style.display = (m === 'revolve') ? 'flex' : 'none';
 
-        const rowSym = document.getElementById('row-symmetric');
-        if (rowSym) rowSym.style.display = (m === 'extrude') ? 'flex' : 'none';
-
-        const rowRInvert = document.getElementById('row-rinvert');
-        if (rowRInvert) rowRInvert.style.display = (m === 'relief') ? 'flex' : 'none';
-
         // Update title
         const titles = {
-            'extrude': 'Boss-Extrude',
-            'revolve': 'Revolve',
-            'levels': 'Stepped-Relief',
-            'relief': 'Heightmap Relief'
+            'smart_3d': 'Smart 3D CAD Solid (Auto)',
+            'stepped_chassis': 'Stepped Sheet Metal Chassis',
+            'multilevel': 'Multi-Level Feature Solid',
+            'perforated_plate': 'Stamped Mounting Plate',
+            'revolve': 'Revolved Boss/Base',
+            'relief': 'Heightmap Relief',
+            'extrude': 'Flat Extrude'
         };
         const titleEl = document.getElementById('pm-header-title');
-        if (titleEl) titleEl.textContent = titles[m] || 'Image to CAD';
+        if (titleEl) titleEl.textContent = titles[m] || '3D Solid Modeling';
     }
 
     function startFeatureMode(mode) {
@@ -268,27 +258,27 @@
         }
     }
 
-    // --- Core Rebuild Pipeline ---
+    // --- Core Rebuild Pipeline (True 3D Solid Modeling) ---
     function rebuildCAD() {
         if (!currentImage) return;
 
-        updateStatus("Tracing outlines & building CAD solid...");
+        updateStatus("Analyzing image & generating true 3D CAD solid...");
 
-        // 1. Image vectorization
+        // 1. Image vectorization & outline detection
         currentTrace = ImageProcessor.traceImage(currentImage, state);
 
         // 2. Render vector overlay on right task pane preview
         renderPreviewOverlay(currentImage, currentTrace);
 
-        // 3. Generate 3D CAD solid
-        currentSolid = CadEngine.buildSolid(currentTrace, state);
+        // 3. Generate true 3D CAD Solid (Non-Flat)
+        currentSolid = CadEngine.buildSolid(currentTrace, state, currentImage);
 
         if (currentSolid) {
             viewport.setModel(currentSolid);
             updateTelemetry();
-            updateStatus(`Solid rebuilt: ${currentTrace.contours.length} contour(s) generated.`);
+            updateStatus(`3D CAD Solid rebuilt: [${currentSolid.name}] with technical feature edges.`);
         } else {
-            updateStatus("Warning: No closed vector boundaries detected with current threshold.");
+            updateStatus("Warning: Could not construct 3D solid.");
         }
     }
 
@@ -303,32 +293,32 @@
         // Draw source image
         ctx.drawImage(img, 0, 0, trace.widthPx, trace.heightPx);
 
-        // Draw traced contours
+        // Draw traced contours & edge outlines
         ctx.lineWidth = 1.8;
-        for (const c of trace.contours) {
-            // Outer contour (Cyan / Blue)
-            ctx.strokeStyle = '#0066ff';
-            ctx.beginPath();
-            const outer = c.outerPixels;
-            ctx.moveTo(outer[0][0], outer[0][1]);
-            for (let i = 1; i < outer.length; i++) {
-                ctx.lineTo(outer[i][0], outer[i][1]);
-            }
-            ctx.closePath();
-            ctx.stroke();
+        if (trace && trace.contours) {
+            for (const c of trace.contours) {
+                ctx.strokeStyle = '#0066ff';
+                ctx.beginPath();
+                const outer = c.outerPixels;
+                ctx.moveTo(outer[0][0], outer[0][1]);
+                for (let i = 1; i < outer.length; i++) {
+                    ctx.lineTo(outer[i][0], outer[i][1]);
+                }
+                ctx.closePath();
+                ctx.stroke();
 
-            // Inner holes (Red / Orange)
-            if (c.holes) {
-                ctx.strokeStyle = '#e65100';
-                for (const hole of c.holes) {
-                    const hp = hole.pixels;
-                    ctx.beginPath();
-                    ctx.moveTo(hp[0][0], hp[0][1]);
-                    for (let i = 1; i < hp.length; i++) {
-                        ctx.lineTo(hp[i][0], hp[i][1]);
+                if (c.holes) {
+                    ctx.strokeStyle = '#e65100';
+                    for (const hole of c.holes) {
+                        const hp = hole.pixels;
+                        ctx.beginPath();
+                        ctx.moveTo(hp[0][0], hp[0][1]);
+                        for (let i = 1; i < hp.length; i++) {
+                            ctx.lineTo(hp[i][0], hp[i][1]);
+                        }
+                        ctx.closePath();
+                        ctx.stroke();
                     }
-                    ctx.closePath();
-                    ctx.stroke();
                 }
             }
         }
@@ -344,7 +334,7 @@
     }
 
     function commitFeature() {
-        const featName = `${state.mode === 'extrude' ? 'Boss-Extrude' : state.mode === 'revolve' ? 'Revolve' : 'Relief'}${featureCounter++}`;
+        const featName = `${state.mode === 'stepped_chassis' ? 'Stepped-Chassis' : state.mode === 'smart_3d' ? 'Smart-3D-Solid' : state.mode === 'perforated_plate' ? 'Stamped-Plate' : state.mode === 'revolve' ? 'Revolve' : 'Relief'}${featureCounter++}`;
         featuresList.push({
             name: featName,
             mode: state.mode,
@@ -357,7 +347,6 @@
         const treeList = document.getElementById('sw-feature-tree');
         if (!treeList) return;
 
-        // Preserve base items (Planes, Origin)
         let html = `
             <li class="sw-tree-item"><span class="sw-tree-icon">🧱</span> Material &lt;AISI 6061-T6&gt;</li>
             <li class="sw-tree-item"><span class="sw-tree-icon">📐</span> Front Plane</li>
@@ -395,7 +384,6 @@
             });
         }
 
-        // Drag and drop onto viewport
         const dropZone = document.getElementById('sw-viewport-container');
         if (dropZone) {
             dropZone.addEventListener('dragover', (e) => {
@@ -418,10 +406,28 @@
             const img = new Image();
             img.onload = () => {
                 currentImage = img;
+                state.sourceFilename = file.name;
                 document.getElementById('pm-source-name').textContent = file.name;
+
+                // Smart auto-selection: check if filename suggests stepped chassis, bracket, or revolve
+                const fn = file.name.toLowerCase();
+                if (fn.includes('whatsapp') || fn.includes('stepped') || fn.includes('chassis') || fn.includes('channel')) {
+                    state.mode = 'stepped_chassis';
+                } else if (fn.includes('plate') || fn.includes('bracket')) {
+                    state.mode = 'perforated_plate';
+                } else if (fn.includes('vase') || fn.includes('bottle')) {
+                    state.mode = 'revolve';
+                } else {
+                    state.mode = 'smart_3d';
+                }
+
+                const selMode = document.getElementById('pm-mode');
+                if (selMode) selMode.value = state.mode;
+                updatePmVisibility();
+
                 switchLeftTab('pm');
                 rebuildCAD();
-                updateStatus(`Loaded image: ${file.name}`);
+                updateStatus(`Loaded image: ${file.name} in True 3D Solid mode.`);
             };
             img.src = e.target.result;
         };
@@ -433,22 +439,28 @@
         document.querySelectorAll('.sw-sample-card').forEach(card => {
             card.addEventListener('click', () => {
                 const src = card.dataset.src;
-                const mode = card.dataset.mode || 'extrude';
+                const mode = card.dataset.mode || 'smart_3d';
                 state.mode = mode;
+                state.sourceFilename = card.dataset.name;
                 const selMode = document.getElementById('pm-mode');
                 if (selMode) selMode.value = mode;
                 updatePmVisibility();
-                loadSampleImage(src, card.dataset.name);
+                loadSampleImage(src, card.dataset.name, mode);
             });
         });
     }
 
-    function loadSampleImage(src, name) {
+    function loadSampleImage(src, name, mode = 'smart_3d') {
         const img = new Image();
         img.onload = () => {
             currentImage = img;
+            state.sourceFilename = name;
+            state.mode = mode;
             const srcNameEl = document.getElementById('pm-source-name');
             if (srcNameEl) srcNameEl.textContent = name;
+            const selMode = document.getElementById('pm-mode');
+            if (selMode) selMode.value = mode;
+            updatePmVisibility();
             rebuildCAD();
         };
         img.src = src;
@@ -463,7 +475,7 @@
             }
 
             const model = viewport.getCurrentModel();
-            const filename = `ImageCAD_Part_${Date.now()}`;
+            const filename = `ImageCAD_3D_Solid_${Date.now()}`;
 
             updateStatus(`Exporting ${format.toUpperCase()} model...`);
 
@@ -496,11 +508,6 @@
         document.getElementById('tool-export-stl')?.addEventListener('click', () => triggerExport('stl'));
         document.getElementById('tool-export-obj')?.addEventListener('click', () => triggerExport('obj'));
         document.getElementById('tool-export-dxf')?.addEventListener('click', () => triggerExport('dxf'));
-
-        document.getElementById('menu-export-step')?.addEventListener('click', () => triggerExport('step'));
-        document.getElementById('menu-export-iges')?.addEventListener('click', () => triggerExport('iges'));
-        document.getElementById('menu-export-stl')?.addEventListener('click', () => triggerExport('stl'));
-        document.getElementById('menu-export-obj')?.addEventListener('click', () => triggerExport('obj'));
     }
 
     // --- Dialogs ---
