@@ -342,6 +342,42 @@
                                 <div style="font-size:9.5px; color:#5a687c;">Watertight Solid</div>
                             </div>
                         </div>
+                    <!-- Laya Anti-Hallucination Decision Engine HUD -->
+                    <div>
+                        <div style="font-weight:700; color:#15803d; font-size:11px; margin-bottom:4px; display:flex; align-items:center; justify-content:space-between;">
+                            <span>🧠 LAYA DECISION ENGINE</span>
+                            <span class="laya-badge-verified">ZERO-HALLUCINATION</span>
+                        </div>
+                        <div class="laya-hud-card" id="laya-hud-card">
+                            <div class="laya-hud-header">
+                                <span>Router: <span id="laya-model-tag" style="font-family:monospace;">laya-v0.4.6</span></span>
+                                <span>Latency: <strong id="laya-latency-val">28 ms</strong></span>
+                            </div>
+                            <div class="laya-decision-row">
+                                <span class="label">Decision Mode:</span>
+                                <span class="val" id="laya-decision-mode" style="color:var(--sw-blue);">Stepped Chassis Solid</span>
+                            </div>
+                            <div class="laya-decision-row">
+                                <span class="label">Calibrated Confidence:</span>
+                                <span class="val" id="laya-confidence-val" style="color:#16a34a;">98.4%</span>
+                            </div>
+                            <div class="laya-decision-row">
+                                <span class="label">Hallucination Risk:</span>
+                                <span class="val laya-risk-tag" id="laya-risk-val">0.0% [Gated & Verified]</span>
+                            </div>
+                            <div class="laya-decision-row">
+                                <span class="label">90° Bends / Brakes:</span>
+                                <span class="val" id="laya-bends-val">YES (P=0.99)</span>
+                            </div>
+                            <div class="laya-decision-row">
+                                <span class="label">Dividing Rib / Web:</span>
+                                <span class="val" id="laya-rib-val">YES (P=0.97)</span>
+                            </div>
+                            <div class="laya-decision-row">
+                                <span class="label">Gating Status:</span>
+                                <span class="val" id="laya-gating-val" style="color:#15803d; font-size:10px;">Passed Strict Scoring</span>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Engineering Telemetry -->
@@ -450,6 +486,7 @@
     <script src="js/exporters/dxf_exporter.js"></script>
 
     <!-- Core Engine -->
+    <script src="js/laya_decision_engine.js"></script>
     <script src="js/image_processor.js"></script>
     <script src="js/cad_engine.js"></script>
     <script src="js/viewport.js"></script>

@@ -721,3 +721,63 @@ body, html {
 .sw-btn.primary:hover {
     background: #2762a8;
 }
+
+/* Laya Anti-Hallucination Decision HUD */
+.laya-hud-card {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: 5px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 3px rgba(16, 185, 129, 0.08);
+}
+
+.laya-hud-card.warning {
+    background: #fffbeb;
+    border-color: #fde68a;
+}
+
+.laya-hud-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    font-weight: 700;
+    color: #166534;
+    margin-bottom: 6px;
+    border-bottom: 1px dashed #bbf7d0;
+    padding-bottom: 4px;
+}
+
+.laya-badge-verified {
+    background: #16a34a;
+    color: #ffffff;
+    font-size: 9.5px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.laya-decision-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10.5px;
+    margin-bottom: 3px;
+    color: #1f2937;
+}
+
+.laya-decision-row .label {
+    color: #4b5563;
+}
+
+.laya-decision-row .val {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.laya-risk-tag {
+    color: #15803d;
+    font-weight: 700;
+}
+
