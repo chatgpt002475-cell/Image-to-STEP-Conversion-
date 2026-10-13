@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ImageCAD - SolidWorks Style Web CAD Studio</title>
+    <link rel="stylesheet" href="css/solidworks.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧊</text></svg>">
+</head>
+<body>
+    <div id="app-container">
+        <!-- Top Menu Bar -->
+        <header class="sw-menubar">
+            <div class="sw-menu-logo">
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM12 6l-6 6h4v6h4v-6h4z"/></svg>
+                <span>ImageCAD</span>
+            </div>
+            <nav class="sw-menu-items">
+                <button class="sw-menu-btn" id="menu-file">File</button>
+                <button class="sw-menu-btn" id="menu-edit">Edit</button>
+                <button class="sw-menu-btn" id="menu-view">View</button>
+                <button class="sw-menu-btn" id="menu-insert">Insert</button>
+                <button class="sw-menu-btn" id="menu-tools">Tools</button>
+                <button class="sw-menu-btn" id="menu-help">Help</button>
+            </nav>
+            <div class="sw-search-box">
+                <input type="text" placeholder="Search commands...">
+            </div>
+        </header>
+
+        <!-- CommandManager Ribbon -->
+        <div class="sw-ribbon">
+            <div class="sw-ribbon-tabs">
+                <div class="sw-ribbon-tab active" data-tab="features">Features</div>
+                <div class="sw-ribbon-tab" data-tab="sketch">Sketch & Image</div>
+                <div class="sw-ribbon-tab" data-tab="evaluate">Evaluate</div>
+                <div class="sw-ribbon-tab" data-tab="export">Import / Export</div>
+            </div>
+
+            <div class="sw-ribbon-body">
+                <!-- Features Ribbon Tab -->
+                <div class="sw-ribbon-tab-content active" id="ribbon-features">
+                    <div class="sw-ribbon-group">
+                        <div class="sw-ribbon-group-tools">
+                            <button class="sw-tool-btn" id="tool-extrude">
+                                <span class="sw-tool-icon">📐</span>
+                                <span class="sw-tool-label">Extruded<br>Boss/Base</span>
+                            </button>
+                            <button class="sw-tool-btn" id="tool-revolve">
+                                <span class="sw-tool-icon">🔄</span>
+                                <span class="sw-tool-label">Revolved<br>Boss/Base</span>
+                            </button>
+                            <button class="sw-tool-btn" id="tool-levels">
+                                <span class="sw-tool-icon">🥞</span>
+                                <span class="sw-tool-label">Stepped<br>Relief</span>
+                            </button>
+                            <button class="sw-tool-btn" id="tool-relief">
+                                <span class="sw-tool-icon">🏔️</span>
+                                <span class="sw-tool-label">Heightmap<br>Relief</span>
+                            </button>
+                        </div>
+                        <div class="sw-ribbon-group-label">Image to CAD Solids</div>
+                    </div>
+
+                    <div class="sw-ribbon-group">
+                        <div class="sw-ribbon-group-tools">
+                            <button class="sw-tool-btn" id="tool-open-img">
+                                <span class="sw-tool-icon">📁</span>
+                                <span class="sw-tool-label">Open<br>Image...</span>
+                            </button>
+                        </div>
+                        <div class="sw-ribbon-group-label">Input</div>
+                    </div>
+                </div>
+
+                <!-- Sketch & Image Ribbon Tab -->
+                <div class="sw-ribbon-tab-content" id="ribbon-sketch">
+                    <div class="sw-ribbon-group">
+                        <div class="sw-ribbon-group-tools">
+                            <button class="sw-tool-btn" id="tool-sketch-trace">
+                                <span class="sw-tool-icon">✏️</span>
+                                <span class="sw-tool-label">Trace<br>Outlines</span>
+                            </button>
+                            <button class="sw-tool-btn" id="tool-export-dxf">
+                                <span class="sw-tool-icon">📐</span>
+                                <span class="sw-tool-label">Export Sketch<br>as DXF</span>
+                            </button>
+                        </div>
+                        <div class="sw-ribbon-group-label">2D Sketch</div>
+                    </div>
+                </div>
+
+                <!-- Evaluate Ribbon Tab -->
+                <div class="sw-ribbon-tab-content" id="ribbon-evaluate">
+                    <div class="sw-ribbon-group">
+                        <div class="sw-ribbon-group-tools">
+                            <button class="sw-tool-btn" id="tool-measure">
+                                <span class="sw-tool-icon">📏</span>
+                                <span class="sw-tool-label">Measure</span>
+                            </button>
+                            <button class="sw-tool-btn" id="tool-mass">
+                                <span class="sw-tool-icon">⚖️</span>
+                                <span class="sw-tool-label">Mass<br>Properties</span>
+                            </button>
+                        </div>
+                        <div class="sw-ribbon-group-label">Inspection</div>
+                    </div>
+                </div>
+
+                <!-- Import / Export Ribbon Tab -->
+                <div class="sw-ribbon-tab-content" id="ribbon-export">
+                    <div class="sw-ribbon-group">
+                        <div class="sw-ribbon-group-tools">
+                            <button class="sw-tool-btn" id="tool-export-step">
+                                <span class="sw-tool-icon">💾</span>
+                                <span class="sw-tool-label">Export STEP<br>(AP214)</span>
+                            </button>
+                            <button class="sw-tool-btn" id="tool-export-iges">
+                                <span class="sw-tool-icon">📐</span>
+                                <span class="sw-tool-label">Export<br>IGES (.igs)</span>
+                            </button>
+                            <button class="sw-tool-btn" id="tool-export-stl">
+                                <span class="sw-tool-icon">🖨️</span>
+                                <span class="sw-tool-label">Export STL<br>(3D Print)</span>
+                            </button>
+                            <button class="sw-tool-btn" id="tool-export-obj">
+                                <span class="sw-tool-icon">🧊</span>
+                                <span class="sw-tool-label">Export<br>OBJ</span>
+                            </button>
+                        </div>
+                        <div class="sw-ribbon-group-label">Standard CAD Formats</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Workbench -->
+        <div class="sw-workbench">
+            <!-- Left Side Panel (FeatureManager / PropertyManager) -->
+            <aside class="sw-left-panel">
+                <div class="sw-left-tabs">
+                    <div class="sw-left-tab active" data-pane="tree">
+                        <span>🌳</span> FeatureManager
+                    </div>
+                    <div class="sw-left-tab" data-pane="pm">
+                        <span>⚙️</span> PropertyManager
+                    </div>
+                </div>
+
+                <!-- FeatureManager Design Tree Pane -->
+                <div class="sw-left-pane active" id="pane-tree">
+                    <ul class="sw-tree" id="sw-feature-tree">
+                        <li class="sw-tree-item"><span class="sw-tree-icon">🧱</span> Material &lt;AISI 6061-T6&gt;</li>
+                        <li class="sw-tree-item"><span class="sw-tree-icon">📐</span> Front Plane</li>
+                        <li class="sw-tree-item"><span class="sw-tree-icon">📐</span> Top Plane</li>
+                        <li class="sw-tree-item"><span class="sw-tree-icon">📐</span> Right Plane</li>
+                        <li class="sw-tree-item"><span class="sw-tree-icon">📍</span> Origin</li>
+                        <li class="sw-tree-item selected"><span class="sw-tree-icon">📦</span> Boss-Extrude1</li>
+                    </ul>
+                </div>
+
+                <!-- PropertyManager Panel Pane -->
+                <div class="sw-left-pane" id="pane-pm">
+                    <div class="sw-pm-header">
+                        <div class="sw-pm-actions">
+                            <button class="sw-pm-btn ok" id="pm-btn-ok" title="OK - Commit Feature">✔</button>
+                            <button class="sw-pm-btn preview" id="pm-btn-preview" title="Preview in Viewport">👁</button>
+                            <button class="sw-pm-btn cancel" id="pm-btn-cancel" title="Cancel">✖</button>
+                        </div>
+                        <span class="sw-pm-title" id="pm-header-title">Boss-Extrude</span>
+                    </div>
+
+                    <div class="sw-pm-notice">
+                        Adjust parameters below. Click <strong>✔ (Green Check)</strong> to commit feature.
+                    </div>
+
+                    <!-- Source Image -->
+                    <div class="sw-groupbox">
+                        <div class="sw-groupbox-title">Source Image</div>
+                        <div class="sw-control-row">
+                            <span id="pm-source-name" style="font-weight:600; color:var(--sw-blue);">bracket.png</span>
+                            <button class="sw-btn" onclick="document.getElementById('sw-file-input').click()">Browse...</button>
+                        </div>
+                    </div>
+
+                    <!-- Conversion Type -->
+                    <div class="sw-groupbox">
+                        <div class="sw-groupbox-title">Conversion Type</div>
+                        <div class="sw-control-row">
+                            <label for="pm-mode">Operation:</label>
+                            <select id="pm-mode">
+                                <option value="extrude">Extruded Boss/Base</option>
+                                <option value="revolve">Revolved Boss/Base</option>
+                                <option value="levels">Stepped Relief</option>
+                                <option value="relief">Heightmap Relief</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Outline Detection -->
+                    <div class="sw-groupbox" id="group-detection">
+                        <div class="sw-groupbox-title">Outline Detection</div>
+                        <div class="sw-control-row">
+                            <label for="pm-method">Method:</label>
+                            <select id="pm-method">
+                                <option value="otsu">Automatic (Otsu)</option>
+                                <option value="manual">Manual Threshold</option>
+                                <option value="adaptive">Adaptive (Uneven)</option>
+                                <option value="edges">Edge Detection</option>
+                            </select>
+                        </div>
+
+                        <div class="sw-control-row" id="row-manual-threshold" style="display:none;">
+                            <label>Threshold:</label>
+                            <input type="range" id="pm-threshold" min="1" max="254" value="128">
+                            <span id="pm-threshold-val" style="width:30px; text-align:right;">128</span>
+                        </div>
+
+                        <div class="sw-checkbox-row">
+                            <input type="checkbox" id="pm-invert">
+                            <label for="pm-invert">Invert (trace light shapes)</label>
+                        </div>
+
+                        <div class="sw-checkbox-row">
+                            <input type="checkbox" id="pm-holes" checked>
+                            <label for="pm-holes">Keep holes / inner cut-outs</label>
+                        </div>
+
+                        <div class="sw-control-row">
+                            <label for="pm-blur">Noise blur (px):</label>
+                            <input type="number" id="pm-blur" min="0" max="10" value="1">
+                        </div>
+
+                        <div class="sw-control-row">
+                            <label for="pm-morph">Clean-up speckle (px):</label>
+                            <input type="number" id="pm-morph" min="0" max="10" value="1">
+                        </div>
+
+                        <div class="sw-control-row">
+                            <label for="pm-simplify">Simplify polygon (px):</label>
+                            <input type="number" id="pm-simplify" min="0" max="20" step="0.2" value="1.2">
+                        </div>
+
+                        <div class="sw-control-row">
+                            <label for="pm-minarea">Ignore smaller than (px²):</label>
+                            <input type="number" id="pm-minarea" min="0" max="5000" value="80">
+                        </div>
+
+                        <div class="sw-control-row">
+                            <label for="pm-smooth">Smoothing passes:</label>
+                            <input type="number" id="pm-smooth" min="0" max="4" value="0">
+                        </div>
+                    </div>
+
+                    <!-- Size and Direction -->
+                    <div class="sw-groupbox">
+                        <div class="sw-groupbox-title">Size and Direction</div>
+                        <div class="sw-control-row">
+                            <label for="pm-width">Width (mm):</label>
+                            <input type="number" id="pm-width" min="1" max="5000" value="100">
+                        </div>
+
+                        <div class="sw-control-row" id="row-thick">
+                            <label for="pm-thick">Depth / D1 (mm):</label>
+                            <input type="number" id="pm-thick" min="0.1" max="1000" step="1" value="10">
+                        </div>
+
+                        <div class="sw-control-row" id="row-base" style="display:none;">
+                            <label for="pm-base">Base thickness (mm):</label>
+                            <input type="number" id="pm-base" min="0.5" max="100" value="2">
+                        </div>
+
+                        <div class="sw-control-row" id="row-levels" style="display:none;">
+                            <label for="pm-levels">Tone levels:</label>
+                            <input type="number" id="pm-levels" min="2" max="8" value="4">
+                        </div>
+
+                        <div class="sw-control-row" id="row-res" style="display:none;">
+                            <label for="pm-res">Grid resolution:</label>
+                            <input type="number" id="pm-res" min="16" max="128" value="64">
+                        </div>
+
+                        <div class="sw-control-row" id="row-angle" style="display:none;">
+                            <label for="pm-angle">Revolve angle (°):</label>
+                            <input type="number" id="pm-angle" min="1" max="360" value="360">
+                        </div>
+
+                        <div class="sw-checkbox-row" id="row-symmetric">
+                            <input type="checkbox" id="pm-symmetric">
+                            <label for="pm-symmetric">Mid plane (extrude both sides)</label>
+                        </div>
+
+                        <div class="sw-checkbox-row" id="row-rinvert" style="display:none;">
+                            <input type="checkbox" id="pm-rinvert">
+                            <label for="pm-rinvert">Bright = tall (reverse height)</label>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center 3D Graphics Viewport -->
+            <main class="sw-viewport-container" id="sw-viewport-container">
+                <!-- Heads-up View Toolbar -->
+                <div class="sw-headsup-toolbar">
+                    <button class="sw-headsup-btn" id="btn-view-fit" title="Zoom to Fit (F)">🔍 Fit</button>
+                    <div class="sw-headsup-sep"></div>
+                    <button class="sw-headsup-btn" data-view="isometric" title="Isometric View (Ctrl+7)">🧊 Iso</button>
+                    <button class="sw-headsup-btn" data-view="front" title="Front View (Ctrl+1)">📐 Front</button>
+                    <button class="sw-headsup-btn" data-view="top" title="Top View (Ctrl+5)">📐 Top</button>
+                    <button class="sw-headsup-btn" data-view="right" title="Right View (Ctrl+4)">📐 Right</button>
+                    <div class="sw-headsup-sep"></div>
+                    <select id="sel-display-style" style="padding:2px 4px; font-size:11px; border:none; background:transparent; outline:none; cursor:pointer;">
+                        <option value="shaded_edges">Shaded with Edges</option>
+                        <option value="shaded">Shaded</option>
+                        <option value="wireframe">Wireframe</option>
+                    </select>
+                    <div class="sw-headsup-sep"></div>
+                    <button class="sw-headsup-btn" id="btn-view-section" title="Section View / Cross-Section Slicer">✂️ Section</button>
+                </div>
+
+                <canvas id="sw-canvas"></canvas>
+            </main>
+
+            <!-- Right Task Pane -->
+            <aside class="sw-right-panel">
+                <div class="sw-right-panel-header">
+                    <span>Task Pane & Samples</span>
+                    <span>📂</span>
+                </div>
+
+                <div class="sw-right-content">
+                    <!-- Tracing Preview Box -->
+                    <div>
+                        <div style="font-weight:700; color:var(--sw-blue); font-size:11px; margin-bottom:4px;">
+                            IMAGE & VECTOR TRACE
+                        </div>
+                        <div class="sw-preview-box">
+                            <canvas id="sw-preview-canvas"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Built-in Mechanical Sample Models -->
+                    <div>
+                        <div style="font-weight:700; color:var(--sw-blue); font-size:11px; margin-bottom:4px;">
+                            SAMPLE MODELS (1-CLICK LOAD)
+                        </div>
+                        <div class="sw-sample-strip">
+                            <div class="sw-sample-card" data-src="samples/bracket.png" data-name="bracket.png" data-mode="extrude">
+                                <img src="samples/bracket.png" alt="Bracket">
+                                <div>Bracket</div>
+                            </div>
+                            <div class="sw-sample-card" data-src="samples/vase.png" data-name="vase.png" data-mode="revolve">
+                                <img src="samples/vase.png" alt="Vase">
+                                <div>Revolve Vase</div>
+                            </div>
+                            <div class="sw-sample-card" data-src="samples/relief.png" data-name="relief.png" data-mode="relief">
+                                <img src="samples/relief.png" alt="Relief">
+                                <div>Bas-Relief</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Engineering Telemetry -->
+                    <div>
+                        <div style="font-weight:700; color:var(--sw-blue); font-size:11px; margin-bottom:4px;">
+                            ENGINEERING TELEMETRY
+                        </div>
+                        <table class="sw-telemetry-table">
+                            <tr>
+                                <td class="label">Bounding Box:</td>
+                                <td class="val" id="tel-bbox">-- mm</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Volume:</td>
+                                <td class="val" id="tel-volume">-- cm³</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Surface Area:</td>
+                                <td class="val" id="tel-area">-- cm²</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Triangles:</td>
+                                <td class="val" id="tel-tris">-- ▲</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Vertices:</td>
+                                <td class="val" id="tel-verts">-- pts</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Bottom Status Bar -->
+        <footer class="sw-statusbar">
+            <div class="sw-status-left">
+                <span id="sw-status-msg">Ready</span>
+            </div>
+            <div class="sw-status-right">
+                <span class="sw-unit-tag">MMGS</span>
+                <span>Active: Boss-Extrude</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Hidden File Input -->
+    <input type="file" id="sw-file-input" accept="image/*" style="display:none;">
+
+    <!-- Measure Dialog -->
+    <div class="sw-modal-overlay" id="modal-measure">
+        <div class="sw-modal">
+            <div class="sw-modal-header">
+                <span>Measure Tool</span>
+                <button class="sw-pm-btn cancel sw-modal-close">✖</button>
+            </div>
+            <div class="sw-modal-body" id="measure-details"></div>
+            <div class="sw-modal-footer">
+                <button class="sw-btn primary sw-modal-close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mass Properties Dialog -->
+    <div class="sw-modal-overlay" id="modal-mass">
+        <div class="sw-modal">
+            <div class="sw-modal-header">
+                <span>Mass Properties</span>
+                <button class="sw-pm-btn cancel sw-modal-close">✖</button>
+            </div>
+            <div class="sw-modal-body" id="mass-details"></div>
+            <div class="sw-modal-footer">
+                <button class="sw-btn primary sw-modal-close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- About Dialog -->
+    <div class="sw-modal-overlay" id="modal-about">
+        <div class="sw-modal">
+            <div class="sw-modal-header">
+                <span>About ImageCAD</span>
+                <button class="sw-pm-btn cancel sw-modal-close">✖</button>
+            </div>
+            <div class="sw-modal-body">
+                <h3>ImageCAD - SolidWorks Style Web CAD Studio</h3>
+                <p style="margin-top:8px;">
+                    A high-performance in-browser 3D CAD application that converts images into real 3D solids with SolidWorks-layout CommandManager, FeatureManager tree, PropertyManager, and ISO 10303-21 STEP AP214 export.
+                </p>
+            </div>
+            <div class="sw-modal-footer">
+                <button class="sw-btn primary sw-modal-close">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts (Bundled 100% Offline) -->
+    <script src="libs/three.min.js"></script>
+    <script src="libs/OrbitControls.js"></script>
+
+    <!-- Exporters -->
+    <script src="js/exporters/step_exporter.js"></script>
+    <script src="js/exporters/iges_exporter.js"></script>
+    <script src="js/exporters/stl_exporter.js"></script>
+    <script src="js/exporters/obj_exporter.js"></script>
+    <script src="js/exporters/dxf_exporter.js"></script>
+
+    <!-- Core Engine -->
+    <script src="js/image_processor.js"></script>
+    <script src="js/cad_engine.js"></script>
+    <script src="js/viewport.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
